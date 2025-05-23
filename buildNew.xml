@@ -1,0 +1,108 @@
+<project name="AcoesTreinamento" basedir=".">
+
+	<property name="NomeExtensao" value="acoesTreinamento" />
+
+	<property name="jarName" value="${NomeExtensao}-model.jar" />
+	<property name="jarFile" value="build\${jarName}" />
+	<property name="temp" value="C:\temp\${NomeExtensao}-model" />
+	<property name="temp.bin" value="${temp}/bin" />
+	<property name="main.src" value="src" />
+	<property name="main.ejbsrc" value="ejbsrc" />
+	<property name="ext.build.dir" value="${home.skjava}\BuildExts\${NomeExtensao}" />
+	<property name="defaultjboss" value="${home.skjava}\AS\jboss_atacadist\server\default" />
+	<property name="defaultdeploy" value="${home.skjava}\workspaces\deploy" />
+
+	<tstamp>
+	     <format property="time.stamp" pattern="yyyy-MM-dd"/>
+	</tstamp>
+	
+
+	<path id="project.class.path">
+			<fileset dir="${api_sankhya}">
+				<include name="*.jar" />
+				<include name="**/*.jar" />
+			</fileset>
+			<fileset dir="${api_outros}">
+				<include name="*.jar" />
+				<include name="**/*.jar" />
+			</fileset>
+			<fileset dir="${api_custom}\${NomeExtensao}\java-lib">
+				<include name="*.jar" />
+				<include name="**/*.jar" />
+			</fileset>
+		</path>
+		<path id="project.source.path">
+			<pathelement location="${main.src}" />
+			<pathelement location="${main.ejbsrc}" />
+		</path>
+	
+		<target name="1 - Gerar Projeto" depends="z-create-temp,z-javac,z-copyjar-api-custom,z-empacotar" if="eclipse.home">
+			<delete dir="${temp}" verbose="true" />
+			<delete dir="${basedir}\ejbsrc">
+				<include name="**/*.java" />
+			</delete>
+			<ant dir="${basedir}" antfile="${basedir}\xdoclet-build.xml" />
+			
+			<mkdir dir="build" />
+			<delete file="${jarFile}" />
+			<jar destfile="${jarFile}">
+				<zipfileset dir="build/META-INF" prefix="META-INF">
+					<include name="**/*" />
+					<include name="*" />
+				</zipfileset>
+				<zipfileset dir="${temp.bin}">
+					<include name="**/*" />
+					<include name="*" />
+				</zipfileset>
+			</jar>
+			<echo message="JAR criado." />
+			
+			<echo message="Fazendo deploy do JAR ${jarFile} para o servidor de aplicacoes." />
+			<copy file="${jarFile}" todir="${defaultjboss}\deploy" verbose="true" />
+			
+			<delete file="${ext.build.dir}\ejb\${jarName}" failonerror="false" />
+			<copy file="${jarFile}" todir="${ext.build.dir}\ejb"></copy>
+			<echo message="JAR copiado para ${ext.build.dir}\ejb. ${line.separator}Apos enviar tambem o .war e as libs, utilize o Skw Extension Tool para gerar sua extensao." />
+
+		</target>
+	
+		<target name="z-create-temp" depends="z-check-ant">
+			<mkdir dir="${temp.bin}" />
+			<mkdir dir="${ext.build.dir}\ejb" />
+		</target>
+	
+		<target name="z-check-ant" unless="eclipse.home">
+			<echo message="Propriedades requeridas nao disponiveis (rode este ANT dentro da mesma JRE do seu Eclipse). ${line.separator}Botao direito no ant>Run As...>Ant Build...>Aba JRE>Marcar opcao 'Run in the same JRE as the workspace'." />
+		</target>
+	
+		<target name="z-javac" description="Compilar java">
+			<echo>Limpando .class</echo>
+			<echo>Compilando Java</echo>
+			<javac debug="on" source="1.7" target="1.7" destdir="${temp.bin}" includeantruntime="false" compiler="modern" encoding="ISO-8859-1">	
+				<classpath refid="project.class.path" />
+				<src refid="project.source.path" />
+			</javac>
+			<copy todir="${temp.bin}" verbose="true" includeemptydirs="false">
+				<fileset dir="${main.src}" excludes="**/*.java" />
+			</copy>
+		</target>
+	
+		<target name="z-copyjar-api-custom" description="Copia dependencias da EXT para o lib do Jboss">
+			<echo>Fazendo deploy dos jar de api_custom</echo>
+			<copy verbose="true" todir="${defaultjboss}\lib" >
+				<fileset dir="${api_custom}\${NomeExtensao}\java-lib" >
+					<include name="**/*.*" />
+				</fileset>
+			</copy>
+		</target>
+	
+		<target name="z-empacotar" description="Gravar o .Jar do projeto">
+			<delete dir="${defaultdeploy}">
+				<include name="${NomeExtensao}*.jar" />
+			</delete>
+			<mkdir dir="${defaultdeploy}" />
+			<jar destfile="${defaultdeploy}/${NomeExtensao}-${time.stamp}.jar" basedir="bin" />
+			<echo message="Processo finalizado com sucesso, projeto ${NomeExtensao}" />				
+		</target>
+				
+</project>
