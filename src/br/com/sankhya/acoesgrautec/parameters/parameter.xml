@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE parameters>
+<parameters group-name="mge.acoestbm" data-source="br.com.sankhya.modelcore.util.MGECoreParameter">
+	
+	<parameter
+	    name="br.com.sankhya.acoestbm.parametro.vlrlitro"
+	    key="VALORLITRO"
+	    type="number"
+	    cacheable="false"
+	    required="false"
+	    default="0.00"
+	    description="Valor do preço do litro de combustível"
+	    module="E"
+	/>
+	
+	<parameter
+	    name="br.com.sankhya.acoestbm.parametro.urlintegra"
+	    key="URLINTEGRA"
+	    type="string"
+	    cacheable="false"
+	    required="false"
+	    default=""
+	    description="Url para integração Abastecimento"
+	    module="E"
+	/>
+	
+	<parameter
+	    name="br.com.sankhya.acoestbm.parametro.notamodeloext"
+	    key="NOTAMODELOEXT"
+	    type="int"
+	    cacheable="false"
+	    required="false"
+	    default="0"
+	    description="Nota Modelo para lançamento de notas extensão"
+	    module="E"
+	/>
+	
+</parameters>

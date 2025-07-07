@@ -1,0 +1,12 @@
+<component name="ArtifactManager">
+  <artifact name="AcoesGrauTecNovo:jar">
+    <output-path>$PROJECT_DIR$/classes/artifacts/AcoesGrauTecNovo_jar</output-path>
+    <root id="root">
+      <element id="archive" name="AcoesGrauTecNovo.jar">
+        <element id="directory" name="META-INF">
+          <element id="file-copy" path="$USER_HOME$/Downloads/META-INF/MANIFEST.MF" />
+        </element>
+      </element>
+    </root>
+  </artifact>
+</component>
