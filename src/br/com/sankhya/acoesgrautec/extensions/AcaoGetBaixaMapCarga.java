@@ -39,7 +39,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Queue;
 
@@ -656,7 +655,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					LogCatcher.logInfo(
 							"Chamando API - Data: " + currentDate + ", Página: " + pagina + ", URL: " + urlCompleta);
 
-					String[] response1 = apiGet2(urlCompleta, token);
+					String[] response1 = apiGet(urlCompleta, token);
 					int status = Integer.parseInt(response1[0]);
 
 					if (status == 200) {
@@ -710,35 +709,74 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 	public void iterarEndpoint(String url, String token, BigDecimal codemp, Map<String, BigDecimal> mapaInfIdBaixaOrig,
-							   Map<BigDecimal, String> mapaInfIdBaixa, Map<String, BigDecimal> mapaInfTipoTituloTaxa,
-							   Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta,
-							   Map<String, BigDecimal> mapaInfAlunos, Map<String, BigDecimal> mapaInfFinanceiro,
-							   Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta,
-							   Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor,
-							   Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao,
-							   Map<String, BigDecimal> mapaInfIdBaixaParcelas,Map<String, BigDecimal> mapaBaixaIdParaNufin) throws Exception {
+			Map<BigDecimal, String> mapaInfIdBaixa, Map<String, BigDecimal> mapaInfTipoTituloTaxa,
+			Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta,
+			Map<String, BigDecimal> mapaInfAlunos, Map<String, BigDecimal> mapaInfFinanceiro,
+			Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta,
+			Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor,
+			Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao,
+			Map<String, BigDecimal> mapaInfIdBaixaParcelas, Map<String, BigDecimal> mapaBaixaIdParaNufin)
+			throws Exception {
 		Date dataAtual = new Date();
 		SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
 		String dataFormatada = formato.format(dataAtual);
 
+		LogCatcher.logInfo("=== iterarEndpoint do JOB de Alunos Baixas iniciado ===");
+		LogCatcher.logInfo("codEmp: " + codemp);
+		LogCatcher.logInfo("\nURL base: " + url);
+
 		try {
-			String[] response = this.apiGet2(url + "/financeiro" + "/baixas" + "?quantidade=0" + "&dataInicial="
+			String[] response = this.apiGet(url + "/financeiro" + "/baixas" + "?quantidade=0" + "&dataInicial="
 					+ dataFormatada + " 00:00:00&dataFinal=" + dataFormatada + " 23:59:59", token);
+
 			int status = Integer.parseInt(response[0]);
-			System.out.println("Status teste: " + status);
-			LogCatcher.logInfo("Status teste: " + status);
 			String responseString = response[1];
-			System.out.println("response string baixas: " + responseString);
-			LogCatcher.logInfo("response string baixas: " + responseString);
-			this.efetuarBaixa(response, url, token, codemp, mapaInfIdBaixaOrig, mapaInfIdBaixa, mapaInfTipoTituloTaxa,
-					mapaInfBanco, mapaInfConta, mapaInfAlunos, mapaInfFinanceiro, mapaInfTipoTitulo,
-					mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado, mapaInfFinanceiroValor,
-					mapaInfFinanceiroBanco, mapaInfTipoTituloCodparcCartao, mapaInfIdBaixaParcelas,mapaBaixaIdParaNufin);
-		} catch (Exception e) {
+
+			LogCatcher.logInfo("Status da requisição: " + status);
+			LogCatcher.logInfo("Resposta da API (baixas): " + responseString);
+
+			if (status == 200) {
+				LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida.");
+				this.efetuarBaixa(response, url, token, codemp, mapaInfIdBaixaOrig, mapaInfIdBaixa,
+						mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta, mapaInfAlunos, mapaInfFinanceiro,
+						mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado,
+						mapaInfFinanceiroValor, mapaInfFinanceiroBanco, mapaInfTipoTituloCodparcCartao,
+						mapaInfIdBaixaParcelas, mapaBaixaIdParaNufin);
+			} else if (status >= 400 && status < 500) {
+
+				String erroMsg = "Erro do Cliente (" + status + "): A requisição para buscar baixas falhou. Resposta: "
+						+ responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro do Cliente (" + status
+						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
+			} else if (status >= 500) {
+
+				String erroMsg = "Erro do Servidor (" + status
+						+ "): Ocorreu um problema no servidor da API ao buscar baixas. Resposta: " + responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro do Servidor (" + status
+						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
+			} else {
+
+				String erroMsg = "Status inesperado (" + status
+						+ "): A API retornou um código não previsto ao buscar baixas. Resposta: " + responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Status inesperado (" + status
+						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
+			}
+		} catch (NumberFormatException e) {
+			String erroMsg = "Erro de Formato de Número: Não foi possível converter o status da resposta da API para um número inteiro.";
+			LogCatcher.logError(erroMsg);
 			LogCatcher.logError(e);
 			e.printStackTrace();
+		} catch (Exception e) {
+			String erroMsg = "Exceção não tratada ao chamar a API de baixas: " + e.getMessage();
+			LogCatcher.logError(erroMsg);
+			LogCatcher.logError(e); 
+			e.printStackTrace();
+			selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Exceção ao buscar baixas: " + e.getMessage().replace("'", "''")
+					+ "', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
 		}
-
 	}
 
 	
@@ -809,8 +847,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		LogCatcher.logInfo("data um dia atras: " + dataUmDiaFormatada);
 		LogCatcher.logInfo("data normal: " + dataAtualFormatada);
 
-		System.out.println("data um dia atras: " + dataUmDiaFormatada);
-		System.out.println("data normal: " + dataAtualFormatada);
 
 		BigDecimal codTipTit = BigDecimal.ZERO;
 		BigDecimal codBanco = BigDecimal.ZERO;
@@ -826,20 +862,16 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 		try {
 			LogCatcher.logInfo("Verificando a resposta: " + response[1]);
-			System.out.println("Verificando a resposta: " + response[1]);
+			if (!response[0].equalsIgnoreCase("200")) {
+	            String erroMsg = "API retornou status não-200: " + response[0] + " - Resposta: " + response[1];
+	            LogCatcher.logError(erroMsg);
+	            selectsParaInsert.add("SELECT <#NUMUNICO#>, '" + erroMsg.replace("'", "''") + "', SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+	            return;
+	        }
 			JsonParser parser = new JsonParser();
 
 			//apenas debug
-			if (response[1] == null) {
-				LogCatcher.logInfo("Resposta nula recebida na efetuarBaixa - Empresa: " + codemp);
-
-				return;
-			}
-
-			//apenas debug
 			String jsonContent = response[1];
-			System.out.println("Primeiro caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(0)));
-			System.out.println("\nÚltimo caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(jsonContent.length() - 1)));
 
 			LogCatcher.logInfo("Primeiro caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(0)));
 			LogCatcher.logInfo("\nÚltimo caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(jsonContent.length() - 1)));
@@ -848,14 +880,10 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			for (JsonElement jsonElement : parser.parse(response[1]).getAsJsonArray()) {
 				JsonObject jsonObject = jsonElement.getAsJsonObject();
 
-				System.out.println("Titulo ID: " + jsonObject.get("titulo_id").getAsInt());
-				System.out.println("Valor da Baixa: " + jsonObject.get("baixa_valor").getAsString());
-
 				LogCatcher.logInfo("Titulo ID: " + jsonObject.get("titulo_id").getAsInt());
 				LogCatcher.logInfo("Valor da Baixa: " + jsonObject.get("baixa_valor").getAsString());
 
 				idAluno = jsonObject.get("aluno_id").getAsString().trim();
-				System.out.println("IdAluno: " + idAluno);
 
 				LogCatcher.logInfo("IdAluno: " + idAluno);
 
@@ -881,9 +909,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					String dataBaixa = jsonObject.get("baixa_data").getAsString();
 
 					LogCatcher.logInfo("Data Baixa: " + dataBaixa);
-					System.out.println("Data Baixa: " + dataBaixa);
 					Date data = formatoOriginal.parse(dataBaixa);
-					System.out.println("Date Baixa: " + data);
 					LogCatcher.logInfo("Date Baixa: " + data);
 					String dataBaixaFormatada = formatoDesejado.format(data);
 					nufin = (BigDecimal) mapaInfFinanceiro.get(codemp + "###" + tituloId);
@@ -905,16 +931,14 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 						dataEstorno = jsonObject.get("baixa_estorno_data").getAsString();
 					} else {
-						System.out.println("Entrou no else de estorno");
+						LogCatcher.logInfo("Entrou no else de estorno");
 						dataEstorno = null;
 					}
 
 					String idExterno = jsonObject.get("local_pagamento_id").getAsString();
 					codBanco = (BigDecimal) mapaInfBanco.get(codemp + "###" + idExterno);
-					System.out.println("Banco: " + codBanco);
 					LogCatcher.logInfo("Banco: " + codBanco);
 					codConta = (BigDecimal) mapaInfConta.get(codemp + "###" + idExterno);
-					System.out.println("Conta: " + codConta);
 					LogCatcher.logInfo("Conta: " + codConta);
 					String nsu_Cartao = "";
 					String autorizacao = "";
@@ -922,7 +946,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 					if (codConta != null && codBanco != null) {
 						JsonArray formas_de_pagamento = jsonObject.getAsJsonArray("formas_de_pagamento");
-						System.out.println("quantidade de formar de pagamento: " + formas_de_pagamento.size());
 						LogCatcher.logInfo("quantidade de formar de pagamento: " + formas_de_pagamento.size());
 						BigDecimal taxaCartao = BigDecimal.ZERO;
 
@@ -933,29 +956,23 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 							for (JsonElement formas_de_pagamentoElement : formas_de_pagamento) {
 
 								JsonObject formas_de_pagamentoObject = formas_de_pagamentoElement.getAsJsonObject();
-								System.out.println("Forma de pagamento: "
-										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
 								LogCatcher.logInfo("Forma de pagamento: "
 										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
 
 
 
 								LogCatcher.logInfo("codemp: " + codemp);
-								System.out.println("codemp: " + codemp);
 								formaDePagamento = formas_de_pagamentoObject.get("forma_pagamento_id").getAsString()
 										.trim();
 
 								String chaveCodTipTit = codemp + "###" + formaDePagamento;
 								LogCatcher.logInfo("[DEBUG] Buscando codTipTit com chave: " + chaveCodTipTit);
 								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveCodTipTit)).orElse(BigDecimal.ZERO);
-								System.out.println("[RESULTADO] codTipTit encontrado: " + codTipTit);
 								LogCatcher.logInfo("[RESULTADO] codTipTit encontrado: " + codTipTit);
 
 								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
-									System.out.println("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
 								} else {
-									System.out.println("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaDePagamento);
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaDePagamento);
 								}
 
@@ -964,7 +981,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 										.ofNullable((BigDecimal) mapaInfTipoTituloTaxa
 												.get(codemp + "###" + formaDePagamento)) // removed "###" + qtdParcelas
 										.orElse(BigDecimal.ZERO);
-								System.out.println("Taxa Cartão: " + taxaCartao);
 								LogCatcher.logInfo("Taxa Cartão: " + taxaCartao);
 
 								nsu_Cartao = (String) Optional.ofNullable(jsonObject.get("forma_pagamento_nsu"))
@@ -985,7 +1001,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 										.orElse("");
 							}
 
-							System.out.println("[USO] Enviando codTipTit para update/insert: " + codTipTit);
 							LogCatcher.logInfo("[USO] Enviando codTipTit para update/insert: " + codTipTit);
 
 							if (taxaCartao.compareTo(BigDecimal.ZERO) != 0) {
@@ -993,17 +1008,13 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 										.subtract(vlrBaixa.multiply(taxaCartao).divide(BigDecimal.valueOf(100L)));
 							}
 
-							System.out.println("estorno: " + dataEstorno);
 							LogCatcher.logInfo("estorno: " + dataEstorno);
-							System.out.println("Data estorno: " + jsonObject.get("baixa_estorno_data"));
 							LogCatcher.logInfo("Data estorno: " + jsonObject.get("baixa_estorno_data"));
 							Date dtMinMovConta = (Date) mapaInfMenorDataMovBancariaPorConta
 									.get(Long.parseLong(codConta.toString()));
-							System.out.println("dtMinMovConta: " + dtMinMovConta);
 							LogCatcher.logInfo("dtMinMovConta: " + dtMinMovConta);
-							System.out.println("Verificando dados de estorno - dataEstorno: " + dataEstorno);
+
 							LogCatcher.logInfo("Verificando dados de estorno - dataEstorno: " + dataEstorno);
-							System.out.println("Status de baixa do titulo: " + mapaInfFinanceiroBaixado.get(nufin));
 							LogCatcher.logInfo("Status de baixa do titulo: " + mapaInfFinanceiroBaixado.get(nufin));
 
 
@@ -1020,8 +1031,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 														mapaInfFinanceiroBaixado.getOrDefault(nufinDaBaixa, "N"));
 
 								if (jaBaixado) {
-									System.out.println("[ESTORNO] BaixaId " + baixaId +
-											" já estava baixada. NUFIN = " + nufinDaBaixa);
 									LogCatcher.logInfo("[ESTORNO] BaixaId " + baixaId +
 											" já estava baixada. NUFIN = " + nufinDaBaixa);
 									
@@ -1030,8 +1039,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 									mapaBaixaEstornada.put(codemp + "###" + baixaId, nufinDaBaixa);
 
 								} else {
-									System.out.println("[INFO] Estorno antes da baixa. " +
-											"BaixaId " + baixaId + " ficará em aberto.");
 									LogCatcher.logInfo("[INFO] Estorno antes da baixa. " +
 											"BaixaId " + baixaId + " ficará em aberto.");
 									selectsParaInsert.add(
@@ -1048,8 +1055,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 							else if (dtMinMovConta != null) {
-								System.out.println("[BAIXA-NORMAL] Processando baixa normal (sem estorno)");
-								System.out.println("[BAIXA-NORMAL] TituloId:" + tituloId + ", NUFIN:" + nufin);
+								LogCatcher.logInfo("[BAIXA-NORMAL] Processando baixa normal (sem estorno)");
+								LogCatcher.logInfo("[BAIXA-NORMAL] TituloId:" + tituloId + ", NUFIN:" + nufin);
 
 								if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
 									this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo: " + nufin
@@ -1059,7 +1066,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 											+ "' FROM DUAL");
 								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
 									if ("N".equalsIgnoreCase((String) mapaInfFinanceiroBaixado.get(nufin))) {
-										System.out.println("Chegou no update");
+										LogCatcher.logInfo("Entrou no codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0");
 										if (vlrBaixa.compareTo((BigDecimal) mapaInfFinanceiroValor.get(nufin)) != 0
 												|| nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
 											if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
@@ -1073,21 +1080,21 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 														baixaId, codemp);
 											}
 										} else {
-											System.out.println("Entrou no if do valor");
+											LogCatcher.logInfo("Entrou no if do valor");
 											this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta, vlrBaixa,
 													vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId,
 													codemp);
 										}
 
-										System.out.println("vlrDesconto: " + vlrDesconto);
-										System.out.println("vlrJuros: " + vlrJuros);
-										System.out.println("vlrMulta: " + vlrMulta);
+										LogCatcher.logInfo("vlrDesconto: " + vlrDesconto);
+										LogCatcher.logInfo("vlrJuros: " + vlrJuros);
+										LogCatcher.logInfo("vlrMulta: " + vlrMulta);
 
 										if (nsu_Cartao == null || nsu_Cartao.isEmpty()) {
 											nubco = this.insertMovBancaria(codConta, vlrBaixa, nufin,
 													dataBaixaFormatada, codemp);
-											System.out.println("Passou da mov bancaria: " + nubco);
-											System.out.println("vlrBaixa: " + vlrBaixa);
+											LogCatcher.logInfo("Passou da mov bancaria: " + nubco);
+											LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
 											this.updateBaixa(nufin, nubco, vlrBaixa, dataBaixaFormatada, baixaId,
 													codemp);
 
@@ -1103,7 +1110,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 											movBanc = true;
 										}
 									} else {
-										System.out.println("Titulo ja baixado");
+										LogCatcher.logInfo("Titulo ja baixado");
 										String baixaIdExist = (String) Optional
 												.ofNullable((String) mapaInfIdBaixa.get(nufin)).orElse("");
 										String baixaIdAtual = (String) Optional
@@ -1112,9 +1119,10 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 												.ofNullable(
 														(BigDecimal) mapaInfIdBaixaOrig.get(baixaId + "###" + nufin))
 												.orElse(BigDecimal.ZERO);
-										System.out.println("baixaIdExist: " + baixaIdExist);
-										System.out.println("baixaIdAtual: " + baixaIdAtual);
-										System.out.println("baixaIdOrig: " + baixaIdOrig);
+										
+										LogCatcher.logInfo("baixaIdExist: " + baixaIdExist);
+										LogCatcher.logInfo("baixaIdAtual: " + baixaIdAtual);
+										LogCatcher.logInfo("baixaIdOrig: " + baixaIdOrig);
 										if (!baixaIdExist.isEmpty() && !baixaIdExist.equalsIgnoreCase(baixaId)
 												&& !baixaIdExist.equalsIgnoreCase("N")
 												&& baixaIdOrig.compareTo(BigDecimal.ZERO) == 0
@@ -1143,7 +1151,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 												mapaInfIdBaixaOrig.put(baixaId + "###" + nufin, nufinDup);
 											}
 
-											System.out.println("Fim baixa dupla");
+											LogCatcher.logInfo("Fim baixa dupla");
 										}
 									}
 								} else {
@@ -1169,20 +1177,15 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 							}
 						} else if (nufin != null && nufin.compareTo(BigDecimal.ZERO) != 0
 								&& formas_de_pagamento.size() > 1) {
-							System.out.println("entrou em mais de uma forma de pagamento");
 							LogCatcher.logInfo("entrou em mais de uma forma de pagamento");
 							int countBaixa = 0;
 
 							for (JsonElement formas_de_pagamentoElement : formas_de_pagamento) {
 								JsonObject formas_de_pagamentoObject = formas_de_pagamentoElement.getAsJsonObject();
-								System.out.println("Forma de pagamento: "
-										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
 
 								LogCatcher.logInfo("Forma de pagamento: "
 										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
 
-
-								System.out.println("codemp: " + codemp);
 								LogCatcher.logInfo("codemp: " + codemp);
 
 
@@ -1195,45 +1198,26 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 								String formaPagamento = formas_de_pagamentoObject.get("forma_pagamento_id").getAsString().trim();
 
 								String chaveComParcelas = codemp + "###" + formaPagamento + (qtdParcelas.compareTo(BigDecimal.ZERO) > 0 ? "###" + qtdParcelas : "");
-								System.out.println("[DEBUG] Buscando codTipTit com chave: " + chaveComParcelas);
 								LogCatcher.logInfo("[DEBUG] Buscando codTipTit com chave: " + chaveComParcelas);
 								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveComParcelas)).orElse(BigDecimal.ZERO);
-								System.out.println("[RESULTADO] codTipTit (com fallback): " + codTipTit);
 								LogCatcher.logInfo("[RESULTADO] codTipTit (com fallback): " + codTipTit);
 								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
-									System.out.println("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
 								} else {
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para chave: " + chaveComParcelas);
-									System.out.println("[VALIDAÇÃO] codTipTit é inválido (ZERO) para chave: " + chaveComParcelas);
 								}
 
-
 								LogCatcher.logInfo("[DEBUG] Buscando codTipTit para múltiplas formas com chave: " + chaveComParcelas);
-								System.out.println("[DEBUG] Buscando codTipTit para múltiplas formas com chave: " + chaveComParcelas);
 								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveComParcelas)).orElse(BigDecimal.ZERO);
 								LogCatcher.logInfo("[RESULTADO] codTipTit (múltiplas formas): " + codTipTit);
-								System.out.println("[RESULTADO] codTipTit (múltiplas formas): " + codTipTit);
 								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
-									System.out.println("[VALIDAÇÃO] codTipTit é válido (múltiplas formas): " + codTipTit);
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido (múltiplas formas): " + codTipTit);
 								} else {
 									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaPagamento + " e parcelas: " + qtdParcelas);
-									System.out.println("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaPagamento + " e parcelas: " + qtdParcelas);
 								}
 
-
 								LogCatcher.logInfo("qtd Parcelas: " + qtdParcelas);
-								System.out.println("qtd Parcelas: " + qtdParcelas);
 
-//								LogCatcher.logInfo("Inicio do Mapa " + codTipTit);
-//
-//								for (Entry<String, BigDecimal> entry : mapaInfTipoTitulo.entrySet()) {
-//									String key = entry.getKey();
-//									BigDecimal val = entry.getValue();
-//									LogCatcher.logInfo("Entidade: " + key + " " + val);
-//								}
-//								LogCatcher.logInfo("Fim  do Mapa " + codTipTit);
 
 								LogCatcher.logInfo("String construída: " + codemp + "###"
 									    + formas_de_pagamentoObject.get("forma_pagamento_id").getAsString().trim());
@@ -1250,7 +1234,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 								LogCatcher.logInfo("Tipo de titulo depois do chaveamento:" + codTipTit);
-								System.out.println("Tipo de titulo:" + codTipTit);
 
 								taxaCartao = (BigDecimal) Optional
 										.ofNullable(
@@ -1287,15 +1270,12 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 								LogCatcher.logInfo("estorno: " + dataEstorno);
 								LogCatcher.logInfo("Data estorno: " + jsonObject.get("baixa_estorno_data"));
 
-								System.out.println("estorno: " + dataEstorno);
-								System.out.println("Data estorno: " + jsonObject.get("baixa_estorno_data"));
 
 								Date dtMinMovConta = (Date) mapaInfMenorDataMovBancariaPorConta
 										.get(Long.parseLong(codConta.toString()));
-								System.out.println("dtMinMovConta: " + dtMinMovConta);
 								LogCatcher.logInfo("dtMinMovConta: " + dtMinMovConta);
 								if (countBaixa == 0) {
-									System.out.println("contagem 1");
+									LogCatcher.logInfo("contagem 1");
 									if (dataEstorno == null) {
 										if (dtMinMovConta != null) {
 											if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
@@ -1315,8 +1295,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 											} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
 												if ("N".equalsIgnoreCase(
 														(String) mapaInfFinanceiroBaixado.get(nufin))) {
-													System.out.println("Chegou no update");
-													LogCatcher.logInfo("Chegou no update");
+													LogCatcher.logInfo("Chegou no codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0");
 													if (vlrBaixa.compareTo(
 															(BigDecimal) mapaInfFinanceiroValor.get(nufin)) != 0
 															|| nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
@@ -1324,7 +1303,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 															//substituido por
 															this.updateFinCartao(codTipTit, nufin, codBanco, codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId, codemp, codParc, dtCredito, nsu_Cartao, autorizacao);
 														} else {
-															System.out.println("Entrou no else do valor");
 															LogCatcher.logInfo("Entrou no else do valor");
 															this.updateFinComVlrBaixa(codTipTit, nufin, codBanco,
 																	codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta,
@@ -1332,15 +1310,10 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 														}
 													} else {
 														LogCatcher.logInfo("Entrou no if do valor");
-														System.out.println("Entrou no if do valor");
 														this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta,
 																vlrBaixa, vlrDesconto, vlrJuros, vlrMulta,
 																vlrOutrosAcrescimos, baixaId, codemp);
 													}
-
-													System.out.println("vlrDesconto: " + vlrDesconto);
-													System.out.println("vlrJuros: " + vlrJuros);
-													System.out.println("vlrMulta: " + vlrMulta);
 
 													LogCatcher.logInfo("vlrDesconto: " + vlrDesconto);
 													LogCatcher.logInfo("vlrJuros: " + vlrJuros);
@@ -1349,8 +1322,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 													if (nsu_Cartao == null || nsu_Cartao.isEmpty()) {
 														nubco = this.insertMovBancaria(codConta, vlrBaixa, nufin,
 																dataBaixaFormatada, codemp);
-														System.out.println("Passou da mov bancaria: " + nubco);
-														System.out.println("vlrBaixa: " + vlrBaixa);
 
 														LogCatcher.logInfo("Passou da mov bancaria: " + nubco);
 														LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
@@ -1364,7 +1335,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 													++countBaixa;
 												} else {
-													System.out.println("Financeiro " + nufin + " já baixado");
 													LogCatcher.logInfo("Financeiro " + nufin + " já baixado");
 													String baixaIdExist = (String) Optional
 															.ofNullable((String) mapaInfIdBaixa.get(nufin)).orElse("");
@@ -1374,9 +1344,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 															.ofNullable((BigDecimal) mapaInfIdBaixaOrig
 																	.get(baixaId + "###" + nufin))
 															.orElse(BigDecimal.ZERO);
-													System.out.println("baixaIdExist: " + baixaIdExist);
-													System.out.println("baixaIdAtual: " + baixaIdAtual);
-													System.out.println("baixaIdOrig: " + baixaIdOrig);
 
 													LogCatcher.logInfo("baixaIdExist: " + baixaIdExist);
 													LogCatcher.logInfo("baixaIdAtual: " + baixaIdAtual);
@@ -1417,7 +1384,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 														}
 
-														System.out.println("Fim baixa dupla");
 														LogCatcher.logInfo("Fim baixa dupla");
 													}
 												}
@@ -1449,7 +1415,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 									}
 								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0
 										&& countBaixa > 0) {
-									System.out.println("contagem 2");
+									LogCatcher.logInfo("contagem 2");
 									if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
 										this.insertFinCartao(nufin, vlrBaixa, codTipTit, codemp, codParc, dtCredito, baixaId);
 									} else {
@@ -1457,8 +1423,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 										nubco = this.insertMovBancaria(codConta, vlrBaixa, nufinDup, dataBaixaFormatada,
 												codemp);
 										movBanc = true;
-										System.out.println("Passou da mov bancaria duplicada: " + nubco);
-										System.out.println("vlrBaixa: " + vlrBaixa);
 
 										LogCatcher.logInfo("Passou da mov bancaria duplicada: " + nubco);
 										LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
@@ -1473,7 +1437,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 								}
 							}
 						} else {
-							System.out.println("Não foi possivel encontrar financeiro com id externo " + tituloId);
 							LogCatcher.logError("Não foi possivel encontrar financeiro com id externo " + tituloId);
 						}
 					} else {
@@ -1496,7 +1459,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			if (movBanc) {
 				this.estornarTgfFin(nufin, codemp);
 				LogCatcher.logInfo("Apagou mov bank");
-				System.out.println("Apagou mov bank");
 			}
 
 			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas: " + e.getMessage()
@@ -1504,8 +1466,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas: " + e.getMessage()
 					+ "', SYSDATE, 'Erro', " + codemp + ", '" + idAluno + "' FROM DUAL");
 
-			System.out.println("Erro de parse JSON: " + e.getMessage());
-			System.out.println("Conteúdo que causou o erro: " + response[1]);
 
 
 			LogCatcher.logError("Erro de parse JSON: " + e.getMessage());
@@ -1517,74 +1477,76 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 	
 
+	// Dentro da classe AcaoGetBaixaMapCarga.java
+
 	private static final int MAX_REQUESTS_PER_MINUTE = 60;
 	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
 	private static final Queue<Long> requestTimestamps = new LinkedList<>();
+	private static final int MAX_RETRIES = 3; // Número máximo de tentativas
+	private static final long INITIAL_RETRY_DELAY_MS = 2000; // 2 segundos de espera inicial
 
-	public synchronized String[] apiGet2(String ur, String token) throws Exception {
-	    long currentTime = System.currentTimeMillis();
-	    requestTimestamps.removeIf(timestamp -> 
-	        currentTime - timestamp > ONE_MINUTE_IN_MS);
+	public synchronized String[] apiGet(String ur, String token) throws Exception {
+	    int attempt = 0;
+	    while (attempt < MAX_RETRIES) {
+	        try {
+	            long currentTime = System.currentTimeMillis();
+	            requestTimestamps.removeIf(timestamp -> currentTime - timestamp > ONE_MINUTE_IN_MS);
 
+	            if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
+	                long oldestRequestTime = requestTimestamps.peek();
+	                long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
+	                if (waitTime > 0) {
+	                    System.out.println("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    Thread.sleep(waitTime);
+	                }
+	            }
+	            requestTimestamps.offer(System.currentTimeMillis());
 
-	    if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
+	            URL obj = new URL(ur.replace(" ", "%20"));
+	            HttpURLConnection https = (HttpURLConnection) obj.openConnection();
+	            https.setRequestMethod("GET");
+	            https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+	            https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+	            https.setRequestProperty("Accept", "application/json");
+	            https.setRequestProperty("Authorization", "Bearer " + token);
+	            https.setConnectTimeout(15000); // 15 segundos de timeout de conexão
+	            https.setReadTimeout(30000); // 30 segundos de timeout de leitura
+	            https.setDoInput(true);
 
-	        long oldestRequestTime = requestTimestamps.peek();
-	        long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
-	        
-	        System.out.println("Limite de 60 requisições por minuto atingido. " +
-	                           "Aguardando " + waitTime + "ms");
-	        
-	        LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. " +
-                    "Aguardando " + waitTime + "ms");
-	        
-	        Thread.sleep(waitTime);
-	        
-	        requestTimestamps.removeIf(timestamp -> 
-	            currentTime - timestamp > ONE_MINUTE_IN_MS);
+	            int status = https.getResponseCode();
+	            StringBuilder responseContent = new StringBuilder();
+	            BufferedReader reader = (status >= 300)
+	                ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
+	                : new BufferedReader(new InputStreamReader(https.getInputStream()));
+
+	            String line;
+	            while ((line = reader.readLine()) != null) {
+	                responseContent.append(line);
+	            }
+	            reader.close();
+	            https.disconnect();
+
+	            System.out.println("Output from Server .... \n" + status);
+	            LogCatcher.logInfo("Output from Server .... \n" + status);
+
+	            return new String[] { Integer.toString(status), responseContent.toString() };
+
+	        } catch (java.net.SocketException | javax.net.ssl.SSLHandshakeException e) {
+	            attempt++;
+	            LogCatcher.logError("Tentativa " + attempt + " falhou com erro de rede: " + e.getMessage());
+	            if (attempt < MAX_RETRIES) {
+	                long delay = INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, attempt - 1);
+	                LogCatcher.logInfo("Aguardando " + delay + "ms antes da próxima tentativa.");
+	                Thread.sleep(delay);
+	            } else {
+	                LogCatcher.logError("Número máximo de tentativas atingido. Desistindo.");
+	                throw e;
+	            }
+	        }
 	    }
-
-	    requestTimestamps.offer(System.currentTimeMillis());
-
-	    BufferedReader reader;
-	    StringBuilder responseContent = new StringBuilder();
-	    String encodedUrl = ur.replace(" ", "%20");
-	    
-	    URL obj = new URL(encodedUrl);
-	    HttpURLConnection https = (HttpURLConnection)obj.openConnection();
-	    
-	    System.out.println("Entrou na API");
-	    System.out.println("URL: " + encodedUrl);
-	    System.out.println("Token Enviado: [" + token + "]");
-	    
-	    https.setRequestMethod("GET");
-	    https.setRequestProperty("User-Agent", 
-	        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-	    https.setRequestProperty("Content-Type", 
-	        "application/json; charset=UTF-8");
-	    https.setRequestProperty("Accept", "application/json");
-	    https.setRequestProperty("Authorization", "Bearer " + token);
-	    https.setDoInput(true);
-	    
-	    int status = https.getResponseCode();
-
-	    reader = (status >= 300) 
-	        ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
-	        : new BufferedReader(new InputStreamReader(https.getInputStream()));
-	    
-	    String line;
-	    while ((line = reader.readLine()) != null)
-	        responseContent.append(line);
-	    
-	    reader.close();
-	    
-	    System.out.println("Output from Server .... \n" + status);
-	    LogCatcher.logInfo("Output from Server .... \n" + status);
-	    
-	    String response = responseContent.toString();
-	    https.disconnect();
-	    
-	    return new String[] { Integer.toString(status), response };
+	    // Retorno padrão em caso de falha após todas as tentativas
+	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
 	}
 
 	public void updateFin(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,

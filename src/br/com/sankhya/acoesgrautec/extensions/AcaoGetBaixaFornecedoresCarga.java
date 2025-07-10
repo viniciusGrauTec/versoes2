@@ -37,9 +37,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
+
 import org.activiti.engine.impl.util.json.JSONArray;
 import org.cuckoo.core.ScheduledAction;
 import org.cuckoo.core.ScheduledActionContext;
@@ -697,45 +700,75 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
     }
 
-    public String[] apiGet2(String ur, String token) throws Exception {
-        StringBuilder responseContent = new StringBuilder();
-        String encodedUrl = ur.replace(" ", "%20");
-        URL obj = new URL(encodedUrl);
-        HttpURLConnection https = (HttpURLConnection)obj.openConnection();
-        System.out.println("Entrou na API");
-        System.out.println("URL: " + encodedUrl);
-        System.out.println("Token Enviado: [" + token + "]");
-        
-        LogCatcher.logInfo("Entrou na API");
-        LogCatcher.logInfo("URL: " + encodedUrl);
-        LogCatcher.logInfo("Token Enviado: [" + token + "]");
-        
-        https.setRequestMethod("GET");
-        https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-        https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        https.setRequestProperty("Accept", "application/json");
-        https.setRequestProperty("Authorization", "Bearer " + token);
-        https.setDoInput(true);
-        int status = https.getResponseCode();
-        BufferedReader reader;
-        if (status >= 300) {
-            reader = new BufferedReader(new InputStreamReader(https.getErrorStream()));
-        } else {
-            reader = new BufferedReader(new InputStreamReader(https.getInputStream()));
-        }
+    private static final int MAX_REQUESTS_PER_MINUTE = 60;
+	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
+	private static final Queue<Long> requestTimestamps = new LinkedList<>();
 
-        String line;
-        while((line = reader.readLine()) != null) {
-            responseContent.append(line);
-        }
+	public synchronized String[] apiGet2(String ur, String token) throws Exception {
+	    long currentTime = System.currentTimeMillis();
+	    requestTimestamps.removeIf(timestamp -> 
+	        currentTime - timestamp > ONE_MINUTE_IN_MS);
 
-        reader.close();
-        System.out.println("Output from Server .... \n" + status);
-        LogCatcher.logInfo("Output from Server .... \n" + status);
-        String response = responseContent.toString();
-        https.disconnect();
-        return new String[]{Integer.toString(status), response};
-    }
+
+	    if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
+
+	        long oldestRequestTime = requestTimestamps.peek();
+	        long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
+	        
+	        System.out.println("Limite de 60 requisições por minuto atingido. " +
+	                           "Aguardando " + waitTime + "ms");
+	        
+	        LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. " +
+                    "Aguardando " + waitTime + "ms");
+	        
+	        Thread.sleep(waitTime);
+	        
+	        requestTimestamps.removeIf(timestamp -> 
+	            currentTime - timestamp > ONE_MINUTE_IN_MS);
+	    }
+
+	    requestTimestamps.offer(System.currentTimeMillis());
+
+	    BufferedReader reader;
+	    StringBuilder responseContent = new StringBuilder();
+	    String encodedUrl = ur.replace(" ", "%20");
+	    
+	    URL obj = new URL(encodedUrl);
+	    HttpURLConnection https = (HttpURLConnection)obj.openConnection();
+	    
+	    System.out.println("Entrou na API");
+	    System.out.println("URL: " + encodedUrl);
+	    System.out.println("Token Enviado: [" + token + "]");
+	    
+	    https.setRequestMethod("GET");
+	    https.setRequestProperty("User-Agent", 
+	        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+	    https.setRequestProperty("Content-Type", 
+	        "application/json; charset=UTF-8");
+	    https.setRequestProperty("Accept", "application/json");
+	    https.setRequestProperty("Authorization", "Bearer " + token);
+	    https.setDoInput(true);
+	    
+	    int status = https.getResponseCode();
+
+	    reader = (status >= 300) 
+	        ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
+	        : new BufferedReader(new InputStreamReader(https.getInputStream()));
+	    
+	    String line;
+	    while ((line = reader.readLine()) != null)
+	        responseContent.append(line);
+	    
+	    reader.close();
+	    
+	    System.out.println("Output from Server .... \n" + status);
+	    LogCatcher.logInfo("Output from Server .... \n" + status);
+	    
+	    String response = responseContent.toString();
+	    https.disconnect();
+	    
+	    return new String[] { Integer.toString(status), response };
+	}
 
     public BigDecimal getNufin(String idTitulo) throws Exception {
         EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();

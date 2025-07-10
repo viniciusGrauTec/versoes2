@@ -18,9 +18,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 
 import org.activiti.engine.impl.util.json.JSONArray;
 import org.activiti.engine.impl.util.json.JSONException;
@@ -38,6 +40,8 @@ import br.com.sankhya.jape.dao.JdbcWrapper;
 import br.com.sankhya.jape.vo.DynamicVO;
 import br.com.sankhya.jape.wrapper.JapeFactory;
 import br.com.sankhya.jape.wrapper.JapeWrapper;
+import br.com.sankhya.modelcore.auth.AuthenticationInfo;
+import br.com.sankhya.modelcore.financeiro.helper.EstornoHelper;
 import br.com.sankhya.modelcore.util.EntityFacadeFactory;
 import br.com.sankhya.modelcore.util.SWRepositoryUtils;
 import edu.emory.mathcs.backport.java.util.concurrent.atomic.AtomicInteger;
@@ -48,6 +52,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+
 
 public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	
@@ -896,7 +901,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 			Map<String, BigDecimal> mapaInfCenCus, Map<String, BigDecimal> mapaInfCenCusAluno,
 			Map<String, BigDecimal> mapaInfAlunos, String url, String token, BigDecimal codEmp) throws Exception {
 
-		LogCatcher.logInfo("=== iterarEndpoint do JOB iniciado ===");
+		LogCatcher.logInfo("=== iterarEndpoint do JOB de Alunos Titulos iniciado ===");
 		LogCatcher.logInfo("tipoEmpresa: " + tipoEmpresa);
 		LogCatcher.logInfo("codEmp: " + codEmp);
 		LogCatcher.logInfo("\nURL base: " + url);
@@ -1086,7 +1091,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        int total = jsonArray.size();
 	        LogCatcher.logInfo("Total de registros no JSON: " + total);
 
-	        processarRegistrosJson(jsonArray, tipoEmpresa, codemp, mapaInfFinanceiro, mapaInfFinanceiroBaixado,
+	        processarRegistrosJson(jsonArray, codemp, tipoEmpresa, codemp, mapaInfFinanceiro, mapaInfFinanceiroBaixado,
 	                mapaInfFinanceiroBanco, mapaInfAlunos, mapaInfCenCus, mapaInfCenCusAluno, mapaInfRecDesp,
 	                mapaInfConta, mapaInfBanco, mapaInfNatureza, selectsParaInsert, selectsParaInsertLog);
 
@@ -1179,7 +1184,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	/**
 	 * Processa cada registro do JSON retornado pela API
 	 */
-	private void processarRegistrosJson(JsonArray jsonArray, String tipoEmpresa, BigDecimal codemp,
+	private void processarRegistrosJson(JsonArray jsonArray,BigDecimal nufin, String tipoEmpresa, BigDecimal codemp,
 	        Map<String, BigDecimal> mapaInfFinanceiro, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
 	        Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfAlunos,
 	        Map<String, BigDecimal> mapaInfCenCus, Map<String, BigDecimal> mapaInfCenCusAluno,
@@ -1236,7 +1241,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        LogCatcher.logInfo("Código parceiro para aluno " + idAluno + ": " + codparc + codParcLog);
 
 	        if (situacao_titulo.equalsIgnoreCase("X")) {
-	            processarTituloCancelado(idFin, codemp, mapaInfFinanceiro, mapaInfFinanceiroBaixado, mapaInfFinanceiroBanco);
+	            processarTituloCancelado(idFin,nufin, codemp, mapaInfFinanceiro, mapaInfFinanceiroBaixado, mapaInfFinanceiroBanco);
 	        } else {
 	            processarTituloAtivo(idFin, vlrDesdob, dtPedido, dataVencFormatada, idAluno, taxaId,
 	                    tipoEmpresa, codemp, codparc, mapaInfFinanceiro, mapaInfCenCus, mapaInfCenCusAluno,
@@ -1247,12 +1252,81 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        System.out.println("\n----- Registro " + count + " processado -----");
 	    }
 	}
+	
+	
+	public void estornarTgfFin(BigDecimal nufin, BigDecimal codemp) throws Exception {
+	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+	    JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+
+	    try {
+	        LogCatcher.logInfo("\nIniciando estorno para NUFIN: " + nufin + " - Empresa: " + codemp);
+	        jdbc.openSession();
+
+	        DynamicVO finVO = getTituloVO(nufin);
+	        if (finVO == null) {
+	            LogCatcher.logInfo("Título financeiro não encontrado para estorno: " + nufin);
+	            return;
+	        }
+
+	        EstornoHelper.EstornoParam estornoParam = new EstornoHelper.EstornoParam();
+	        estornoParam.setNuFin(nufin);
+	        estornoParam.setRecompoe(true); 
+	        estornoParam.setTodosAntecipacao(false);
+	        estornoParam.setResourceID("0"); 
+	        estornoParam.setIgnorarValidacaoUsuarioCaixa(true); 
+	        estornoParam.setContaParaCaixaAberto(BigDecimal.ZERO);
+
+	        AuthenticationInfo auth = AuthenticationInfo.getCurrent();
+
+	        EstornoHelper estornoHelper = new EstornoHelper(entityFacade);
+	        estornoHelper.estornarTitulo(auth, entityFacade, jdbc, estornoParam);
+	        LogCatcher.logInfo("Helper de estorno executado para o NUFIN: " + nufin);
+
+	        deleteTgfFin(nufin, codemp);
+	        LogCatcher.logInfo("Título estornado e removido da TGFFIN com sucesso: " + nufin);
+
+	    } catch (Exception e) {
+	        String erroMsg = "Falha ao estornar título NUFIN " + nufin + ": " + e.getMessage();
+	        LogCatcher.logError(erroMsg);
+	        insertLogIntegracao(erroMsg, "ERRO", "", codemp);
+	        selectsParaInsertLog.add("SELECT <#NUMUNICO#>, 'Erro Ao Estornar Título: "
+	                + erroMsg.replace("'", "''")
+	                + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+	        throw e;
+	    } finally {
+		        jdbc.closeSession();
+	    }
+	}
+	
+	
+	private DynamicVO getTituloVO(BigDecimal nufin) throws Exception {
+		EntityFacade dwfFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = dwfFacade.getJdbcWrapper();
+		jdbc.openSession();
+		try {
+			JapeWrapper finDAO = JapeFactory.dao("Financeiro");
+			DynamicVO finVO = finDAO.findOne("NUFIN = ?", new Object[] { nufin });
+			if (finVO != null) {
+
+				LogCatcher.logInfo("Título localizado - NUFIN: " + nufin + ", NUBCO: " + finVO.asBigDecimal("NUBCO"));
+
+			} else {
+				LogCatcher.logInfo("Título não localizado no getTituloVO - NUFIN: " + nufin);
+
+			}
+			return finVO;
+		} finally {
+			jdbc.closeSession();
+		}
+	}
+
+
 
 
 	/**
 	 * Processa um título que está cancelado (situacao_titulo = 'X')
 	 */
-	private void processarTituloCancelado(String idFin, BigDecimal codemp,
+	private void processarTituloCancelado(String idFin,BigDecimal nufin, BigDecimal codemp,
 	        Map<String, BigDecimal> mapaInfFinanceiro, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
 	        Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco) throws Exception {
 
@@ -1283,17 +1357,8 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	            System.out.println("NUBCO: " + nubco);
 	            LogCatcher.logInfo("Número bancário (NUBCO) associado: " + nubco);
 
-	            System.out.println("Executando updateFinExtorno para NUFIN: " + validarNufin);
-	            LogCatcher.logInfo("Executando updateFinExtorno(NUFIN: " + validarNufin + ", empresa: " + codemp + ")");
-	            updateFinExtorno(validarNufin, codemp);
-
-	            System.out.println("Executando deleteTgfMbc para NUBCO: " + nubco);
-	            LogCatcher.logInfo("Executando deleteTgfMbc(NUBCO: " + nubco + ", empresa: " + codemp + ")");
-	            deleteTgfMbc(nubco, codemp);
-
-	            System.out.println("Executando deleteTgfFin para NUFIN: " + validarNufin);
-	            LogCatcher.logInfo("Executando deleteTgfFin(NUFIN: " + validarNufin + ", empresa: " + codemp + ")");
-	            deleteTgfFin(validarNufin, codemp);
+	            estornarTgfFin(nufin, codemp);
+	            LogCatcher.logInfo("[ESTORNO] Estornando NUFIN: " + nufin + ", Empresa: " + codemp);
 	        } else {
 	            System.out.println("Financeiro não baixado - excluindo diretamente");
 	            LogCatcher.logInfo("Financeiro ainda não baixado - excluindo NUFIN diretamente: " + validarNufin);
@@ -1591,65 +1656,74 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	 */
 	
 	
-	public String[] apiGet(String ur, String token) throws Exception {
-	    BufferedReader reader;
-	    StringBuilder responseContent = new StringBuilder();
-	    String encodedUrl = ur.replace(" ", "%20");
-	    URL obj = new URL(encodedUrl);
-	    HttpURLConnection https = (HttpURLConnection) obj.openConnection();
+	private static final int MAX_REQUESTS_PER_MINUTE = 60;
+	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
+	private static final Queue<Long> requestTimestamps = new LinkedList<>();
+	private static final int MAX_RETRIES = 3; // Número máximo de tentativas
+	private static final long INITIAL_RETRY_DELAY_MS = 2000; // 2 segundos de espera inicial
 
-	    System.out.println("Entrou na API");
-	    System.out.println("URL: " + encodedUrl);
-	    System.out.println("Token Enviado: [" + token + "]");
+	public synchronized String[] apiGet(String ur, String token) throws Exception {
+	    int attempt = 0;
+	    while (attempt < MAX_RETRIES) {
+	        try {
+	            long currentTime = System.currentTimeMillis();
+	            requestTimestamps.removeIf(timestamp -> currentTime - timestamp > ONE_MINUTE_IN_MS);
 
-	    LogCatcher.logInfo("Chamada de API iniciada. URL: " + encodedUrl);
-	    LogCatcher.logInfo("Token Enviado: [" + token + "]");
+	            if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
+	                long oldestRequestTime = requestTimestamps.peek();
+	                long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
+	                if (waitTime > 0) {
+	                    System.out.println("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    Thread.sleep(waitTime);
+	                }
+	            }
+	            requestTimestamps.offer(System.currentTimeMillis());
 
-	    https.setRequestMethod("GET");
-	    https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-	    https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-	    https.setRequestProperty("Accept", "application/json");
-	    https.setRequestProperty("Authorization", "Bearer " + token);
-	    https.setDoInput(true);
+	            URL obj = new URL(ur.replace(" ", "%20"));
+	            HttpURLConnection https = (HttpURLConnection) obj.openConnection();
+	            https.setRequestMethod("GET");
+	            https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+	            https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+	            https.setRequestProperty("Accept", "application/json");
+	            https.setRequestProperty("Authorization", "Bearer " + token);
+	            https.setConnectTimeout(15000); // 15 segundos de timeout de conexão
+	            https.setReadTimeout(30000); // 30 segundos de timeout de leitura
+	            https.setDoInput(true);
 
-	    int status = https.getResponseCode();
+	            int status = https.getResponseCode();
+	            StringBuilder responseContent = new StringBuilder();
+	            BufferedReader reader = (status >= 300)
+	                ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
+	                : new BufferedReader(new InputStreamReader(https.getInputStream()));
 
-	    if (status == 429) {
-	        String retryAfter = https.getHeaderField("Retry-After");
-	        int waitTime = 5;
-	        if (retryAfter != null) {
-	            try {
-	                waitTime = Integer.parseInt(retryAfter);
-	            } catch (NumberFormatException e) {
-	                LogCatcher.logError("Falha ao interpretar Retry-After: " + retryAfter);
+	            String line;
+	            while ((line = reader.readLine()) != null) {
+	                responseContent.append(line);
+	            }
+	            reader.close();
+	            https.disconnect();
+
+	            System.out.println("Output from Server .... \n" + status);
+	            LogCatcher.logInfo("Output from Server .... \n" + status);
+
+	            return new String[] { Integer.toString(status), responseContent.toString() };
+
+	        } catch (java.net.SocketException | javax.net.ssl.SSLHandshakeException e) {
+	            attempt++;
+	            LogCatcher.logError("Tentativa " + attempt + " falhou com erro de rede: " + e.getMessage());
+	            if (attempt < MAX_RETRIES) {
+	                long delay = INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, attempt - 1);
+	                LogCatcher.logInfo("Aguardando " + delay + "ms antes da próxima tentativa.");
+	                Thread.sleep(delay);
+	            } else {
+	                LogCatcher.logError("Número máximo de tentativas atingido. Desistindo.");
+	                throw e;
 	            }
 	        }
-	        System.out.println("Limite atingido. Aguardando " + waitTime + " segundos antes de tentar novamente.");
-	        LogCatcher.logInfo("Status 429 recebido. Reenviando a requisição após " + waitTime + " segundos.");
-
-	        Thread.sleep(waitTime * 1000L);
-	        https.disconnect();
-	        return apiGet(ur, token); // Recursão segura aqui, pois há espera
 	    }
-
-	    if (status >= 300) {
-	        reader = new BufferedReader(new InputStreamReader(https.getErrorStream()));
-	    } else {
-	        reader = new BufferedReader(new InputStreamReader(https.getInputStream()));
-	    }
-
-	    String line;
-	    while ((line = reader.readLine()) != null) {
-	        responseContent.append(line);
-	    }
-	    reader.close();
-
-	    System.out.println("Output from Server .... \n" + status);
-	    LogCatcher.logInfo("Resposta recebida da API. Status: " + status);
-
-	    String response = responseContent.toString();
-	    https.disconnect();
-	    return new String[]{Integer.toString(status), response};
+	    // Retorno padrão em caso de falha após todas as tentativas
+	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
 	}
 
 
@@ -2370,52 +2444,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 	}
 
-	public void updateFinExtorno(BigDecimal nufin, BigDecimal codemp) throws Exception {
-	    JapeWrapper financeiroDAO = JapeFactory.dao("Financeiro");
-	    
-	    try {
-	        // Obtém a data de alteração mais recente do tipo de operação 0
-	        JapeWrapper tipoOperacaoDAO = JapeFactory.dao("TipoOperacao");
-	        DynamicVO tipoOperacaoVO = tipoOperacaoDAO.findOne("CODTIPOPER = ?", new Object[]{BigDecimal.ZERO});
-	        Date dhtipoPerBaixa = tipoOperacaoVO != null ? tipoOperacaoVO.asTimestamp("DHALTER") : null;
-	        
-	        // Realiza a atualização utilizando JapeWrapper, definindo campo por campo
-	        financeiroDAO.prepareToUpdateByPK(nufin)
-	                     .set("VLRBAIXA", BigDecimal.ZERO)
-	                     .set("DHBAIXA", null)
-	                     .set("NUBCO", null)
-	                     .set("CODTIPOPERBAIXA", BigDecimal.ZERO)
-	                     .set("DHTIPOPERBAIXA", dhtipoPerBaixa)
-	                     .set("CODUSUBAIXA", null)
-	                     .update();
-	        
-	        System.out.println("Passou do update");
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        insertLogIntegracao("Erro ao Extornar Titulo " + nufin + ": " + e.getMessage(), "ERRO", "", codemp);
-	        selectsParaInsertLog.add("SELECT <#NUMUNICO#>, 'Erro ao Extornar Titulo " + nufin + ": " + e.getMessage() + "', SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-	        LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro ao Extornar Titulo " + nufin + ": " + e.getMessage() + "', SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-	    }
-	}
-
-
-	public void deleteTgfMbc(BigDecimal nubco, BigDecimal codemp) throws Exception {
-	    JapeWrapper movBancariaDAO = JapeFactory.dao("MovimentacaoBancaria");
-	    
-	    try {
-	        // Exclui a movimentação bancária utilizando JapeWrapper
-	        movBancariaDAO.delete("NUBCO = ?", new Object[]{nubco});
-	        
-	        System.out.println("Passou do update");
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        insertLogIntegracao("Erro ao Excluir Movimentação Bancaria " + nubco + ": " + e.getMessage(), "ERRO", "", codemp);
-	        LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro ao Excluir Movimentação Bancaria " + nubco + ": " + e.getMessage() + "', SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-	        selectsParaInsertLog.add("SELECT <#NUMUNICO#>, 'Erro ao Excluir Movimentação Bancaria " + nubco + ": " + e.getMessage() + "', SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-	        throw e;
-	    }
-	}
-	
 
 	public void deleteTgfFin(BigDecimal nufin, BigDecimal codemp) throws Exception {
 	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
