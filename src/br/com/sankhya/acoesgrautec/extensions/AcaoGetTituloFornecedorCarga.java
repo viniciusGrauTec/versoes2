@@ -2,7 +2,6 @@ package br.com.sankhya.acoesgrautec.extensions;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.net.HttpURLConnection;
@@ -12,14 +11,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 
 import org.activiti.engine.impl.util.json.JSONArray;
 import org.cuckoo.core.ScheduledAction;
@@ -37,9 +37,11 @@ import br.com.sankhya.extensions.actionbutton.Registro;
 import br.com.sankhya.jape.EntityFacade;
 import br.com.sankhya.jape.dao.JdbcWrapper;
 import br.com.sankhya.modelcore.util.EntityFacadeFactory;
+import br.com.sankhya.modelcore.util.SWRepositoryUtils;
 
 public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAction{
 
+	
 	private List<String> selectsParaInsertLog = new ArrayList<String>();
 	private EnviromentUtils util = new EnviromentUtils();
 
@@ -259,7 +261,7 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 
 	@Override
 	public void onTime(ScheduledActionContext arg0) {
-
+		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		PreparedStatement pstmt = null;
@@ -512,43 +514,87 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 		}
 	}
 
-	/**
-	 * Versão otimizada do método apiGet com melhor tratamento de erros e recursos
-	 */
-	public String[] apiGet2(String ur, String token) throws Exception {
-		BufferedReader reader;
-		StringBuilder responseContent = new StringBuilder();
-		String encodedUrl = ur.replace(" ", "%20");
-		URL obj = new URL(encodedUrl);
-		HttpURLConnection https = (HttpURLConnection)obj.openConnection();
-		System.out.println("Entrou na API");
-		System.out.println("URL: " + encodedUrl);
-		System.out.println("Token Enviado: [" + token + "]");
-		https.setRequestMethod("GET");
-		https.setRequestProperty("User-Agent",
-				"Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-		https.setRequestProperty("Content-Type",
-				"application/json; charset=UTF-8");
-		https.setRequestProperty("Accept", "application/json");
-		https.setRequestProperty("Authorization", "Bearer " + token);
-		https.setDoInput(true);
-		int status = https.getResponseCode();
-		if (status >= 300) {
-			reader = new BufferedReader(new InputStreamReader(
-					https.getErrorStream()));
-		} else {
-			reader = new BufferedReader(new InputStreamReader(
-					https.getInputStream()));
-		}
-		String line;
-		while ((line = reader.readLine()) != null)
-			responseContent.append(line);
-		reader.close();
-		System.out.println("Output from Server .... \n" + status);
-		String response = responseContent.toString();
-		https.disconnect();
-		return new String[] { Integer.toString(status), response };
+	private static final int MAX_REQUESTS_PER_MINUTE = 60;
+	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
+	private static final Queue<Long> requestTimestamps = new LinkedList<>();
+	private static final int MAX_RETRIES = 3; // Número máximo de tentativas
+	private static final long INITIAL_RETRY_DELAY_MS = 2000; // 2 segundos de espera inicial
+
+	public synchronized String[] apiGet(String ur, String token) throws Exception {
+	    int attempt = 0;
+	    while (attempt < MAX_RETRIES) {
+	        try {
+	            long currentTime = System.currentTimeMillis();
+	            requestTimestamps.removeIf(timestamp -> currentTime - timestamp > ONE_MINUTE_IN_MS);
+
+	            if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
+	                long oldestRequestTime = requestTimestamps.peek();
+	                long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
+	                if (waitTime > 0) {
+	                    System.out.println("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
+	                    Thread.sleep(waitTime);
+	                }
+	            }
+	            requestTimestamps.offer(System.currentTimeMillis());
+
+	            URL obj = new URL(ur.replace(" ", "%20"));
+	            HttpURLConnection https = (HttpURLConnection) obj.openConnection();
+	            https.setRequestMethod("GET");
+	            https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+	            https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+	            https.setRequestProperty("Accept", "application/json");
+	            https.setRequestProperty("Authorization", "Bearer " + token);
+	            https.setConnectTimeout(15000); // 15 segundos de timeout de conexão
+	            https.setReadTimeout(30000); // 30 segundos de timeout de leitura
+	            https.setDoInput(true);
+
+	            int status = https.getResponseCode();
+	            StringBuilder responseContent = new StringBuilder();
+	            BufferedReader reader = (status >= 300)
+	                ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
+	                : new BufferedReader(new InputStreamReader(https.getInputStream()));
+
+	            String line;
+	            while ((line = reader.readLine()) != null) {
+	                responseContent.append(line);
+	            }
+	            reader.close();
+	            https.disconnect();
+
+	            System.out.println("Output from Server .... \n" + status);
+	            LogCatcher.logInfo("Output from Server .... \n" + status);
+
+	            return new String[] { Integer.toString(status), responseContent.toString() };
+
+	        } catch (java.net.SocketException | javax.net.ssl.SSLHandshakeException e) {
+	            attempt++;
+	            LogCatcher.logError("Tentativa " + attempt + " falhou com erro de rede: " + e.getMessage());
+	            if (attempt < MAX_RETRIES) {
+	                long delay = INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, attempt - 1);
+	                LogCatcher.logInfo("Aguardando " + delay + "ms antes da próxima tentativa.");
+	                Thread.sleep(delay);
+	            } else {
+	                LogCatcher.logError("Número máximo de tentativas atingido. Desistindo.");
+	                throw e;
+	            }
+	        }
+	    }
+	    // Retorno padrão em caso de falha após todas as tentativas
+	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
 	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 
 	public void updateNumFin() throws Exception {
 
@@ -617,86 +663,7 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 		return id;
 	}
 
-	//esse metodo foi alterado
-//	public void processDateRange(String tituloAberto,
-//	        String tipoEmpresa,
-//	        Map<String, BigDecimal> mapaInfNaturezaEmp,
-//	        Map<String, BigDecimal> mapaInfCenCusEmp,
-//	        Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco,
-//	        Map<BigDecimal, String> mapaInfFinanceiroBaixado,
-//	        Map<String, BigDecimal> mapaInfNatureza,
-//	        Map<String, BigDecimal> mapaInfBanco,
-//	        Map<String, BigDecimal> mapaInfConta,
-//	        Map<String, BigDecimal> mapaInfFinanceiro,
-//	        Map<String, BigDecimal> mapaInfCenCus,
-//	        Map<String, BigDecimal> mapaInfParceiros,
-//	        String url,
-//	        String token,
-//	        BigDecimal codEmp,
-//	        String dataInicio,
-//	        String dataFim,
-//	        String idForn) throws Exception {
-//
-//	    try {
-//	        // Validação do período de datas
-//	        LocalDate inicio = LocalDate.parse(dataInicio);
-//	        LocalDate fim = LocalDate.parse(dataFim);
-//
-//	        System.out.println("Iniciando consulta de títulos para o período: " + dataInicio + " até " + dataFim);
-//
-//	        // Construção da URL base com os parâmetros comuns
-//	        StringBuilder urlBuilder = new StringBuilder(url)
-//	            .append("/financeiro/clientes/titulos-pagar?")
-//	            .append("quantidade=0")
-//	            .append("&dataInicial=").append(dataInicio).append(" 00:00:00")
-//	            .append("&dataFinal=").append(dataFim).append(" 23:59:59");
-//
-//	        // Adiciona parâmetro de situação (A = Aberto) se necessário
-//	        if (tituloAberto.equalsIgnoreCase("S")) {
-//	            urlBuilder.append("&situacao=A");
-//	        }
-//
-//	        // Adiciona o parâmetro do fornecedor se estiver presente
-//	        if (idForn != null && !idForn.isEmpty()) {
-//	            String fornecedorEncoded = URLEncoder.encode(idForn, "UTF-8");
-//	            urlBuilder.append("&fornecedor=").append(fornecedorEncoded);
-//	            System.out.println("Adicionando fornecedor à requisição: " + idForn);
-//	        }
-//
-//	        // Realiza uma única chamada à API para todo o período
-//	        String[] response = apiGet(urlBuilder.toString(), token);
-//
-//	        // Processa a resposta
-//	        int status = Integer.parseInt(response[0]);
-//	        System.out.println("Status da requisição: " + status);
-//
-//	        String responseString = response[1];
-//	        System.out.println("Response string títulos: " + responseString);
-//
-//	        // Processa os dados recebidos usando o método de leitura JSON existente
-//	        leituraJSON(tipoEmpresa,
-//	                   mapaInfNaturezaEmp,
-//	                   mapaInfCenCusEmp,
-//	                   mapaInfFinanceiroBanco,
-//	                   mapaInfFinanceiroBaixado,
-//	                   mapaInfNatureza,
-//	                   mapaInfBanco,
-//	                   mapaInfConta,
-//	                   mapaInfFinanceiro,
-//	                   mapaInfCenCus,
-//	                   mapaInfParceiros,
-//	                   response,
-//	                   url,
-//	                   token,
-//	                   codEmp);
-//
-//	    } catch (Exception e) {
-//	        System.err.println("Erro ao processar títulos para o período " +
-//	                          dataInicio + " até " + dataFim + ": " + e.getMessage());
-//	        e.printStackTrace();
-//	        throw e;
-//	    }
-//	}
+
 
 
 	public void processDateRange(
@@ -720,23 +687,23 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 			String idForn) throws Exception {
 
 		try {
-			// Preparar as datas
+
 			String dataInicialCompleta = dataInicio + " 00:00:00";
 			String dataFinalCompleta = dataFim + " 23:59:59";
 
-			// Codificar os parâmetros
+	
 			String dataInicialEncoded = URLEncoder.encode(dataInicialCompleta, "UTF-8");
 			String dataFinalEncoded = URLEncoder.encode(dataFinalCompleta, "UTF-8");
 
-			System.out.println("Iniciando consulta de títulos para o período: " + dataInicio + " até " + dataFim);
+			System.out.println("Iniciando processDateRange de títulos Fornecedores para o período: " + dataInicio + " até " + dataFim);
 
-			// Lista para armazenar todos os registros
+
 			JSONArray todosRegistros = new JSONArray();
 			int pagina = 1;
 			boolean temMaisRegistros = true;
 
 			while (temMaisRegistros) {
-				// Construir a URL para a página atual
+
 				StringBuilder urlBuilder = new StringBuilder();
 				urlBuilder.append(url.trim())
 						.append("/financeiro/clientes/titulos-pagar")
@@ -745,41 +712,37 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 						.append("&dataInicial=").append(dataInicialEncoded)
 						.append("&dataFinal=").append(dataFinalEncoded);
 
-				// Adiciona parâmetro de situação (A = Aberto) se necessário
+		
 				if (tituloAberto.equalsIgnoreCase("S")) {
 					urlBuilder.append("&situacao=A");
 				}
 
-				// Adiciona o parâmetro do fornecedor se estiver presente
 				if (idForn != null && !idForn.isEmpty()) {
 					String fornecedorEncoded = URLEncoder.encode(idForn, "UTF-8");
 					urlBuilder.append("&fornecedor=").append(fornecedorEncoded);
-					System.out.println("Adicionando fornecedor à requisição: " + idForn);
+					LogCatcher.logInfo("Adicionando fornecedor à requisição: " + idForn);
 				}
 
 				String urlCompleta = urlBuilder.toString();
-				System.out.println("URL para títulos (página " + pagina + "): " + urlCompleta);
+				LogCatcher.logInfo("URL para títulos (página " + pagina + "): " + urlCompleta);
 
-				// Fazer a requisição
-				String[] response = apiGet2(urlCompleta, token);
+				String[] response = apiGet(urlCompleta, token);
 				int status = Integer.parseInt(response[0]);
 
 				if (status == 200) {
 					JSONArray paginaAtual = new JSONArray(response[1]);
 
-					// Adicionar registros ao array acumulado
 					for (int i = 0; i < paginaAtual.length(); i++) {
 						todosRegistros.put(paginaAtual.getJSONObject(i));
 					}
 
-					// Verificar se é a última página
 					if (paginaAtual.length() < 100) {
 						temMaisRegistros = false;
 					} else {
 						pagina++;
 					}
 
-					System.out.println("Página " + pagina + ": " + paginaAtual.length() +
+					LogCatcher.logInfo("Página " + pagina + ": " + paginaAtual.length() +
 							" registros. Total acumulado: " + todosRegistros.length());
 				} else {
 					throw new Exception(String.format(
@@ -789,15 +752,13 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 				}
 			}
 
-			// Criar um array de resposta com todos os registros acumulados
 			String[] responseArray = new String[]{
 					String.valueOf(200),
 					todosRegistros.toString()
 			};
 
-			System.out.println("Total de registros de títulos acumulados: " + todosRegistros.length());
+			LogCatcher.logInfo("Total de registros de títulos acumulados: " + todosRegistros.length());
 
-			// Processar todos os registros acumulados
 			leituraJSON(
 					tipoEmpresa,
 					mapaInfNaturezaEmp,
@@ -817,26 +778,19 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 			);
 
 		} catch (Exception e) {
-			System.err.println("Erro ao processar títulos para o período " +
+			LogCatcher.logError("Erro ao processar títulos para o período " +
 					dataInicio + " até " + dataFim + ": " + e.getMessage());
 			e.printStackTrace();
 			throw e;
 		}
 	}
 
-	public void iterarEndpoint(String tipoEmpresa,
-							   Map<String, BigDecimal> mapaInfNaturezaEmp,
-							   Map<String, BigDecimal> mapaInfCenCusEmp,
-							   Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco,
-							   Map<BigDecimal, String> mapaInfFinanceiroBaixado,
-							   Map<String, BigDecimal> mapaInfNatureza,
-							   Map<String, BigDecimal> mapaInfBanco,
-							   Map<String, BigDecimal> mapaInfConta,
-							   Map<String, BigDecimal> mapaInfFinanceiro,
-							   Map<String, BigDecimal> mapaInfCenCus,
-							   Map<String, BigDecimal> mapaInfParceiros,
-							   String url, String token,
-							   BigDecimal codEmp) throws Exception {
+	public void iterarEndpoint(String tipoEmpresa, Map<String, BigDecimal> mapaInfNaturezaEmp,
+			Map<String, BigDecimal> mapaInfCenCusEmp, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco,
+			Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<String, BigDecimal> mapaInfNatureza,
+			Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta,
+			Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfCenCus,
+			Map<String, BigDecimal> mapaInfParceiros, String url, String token, BigDecimal codEmp) throws Exception {
 
 		Date dataAtual = new Date();
 
@@ -846,30 +800,72 @@ public class AcaoGetTituloFornecedorCarga implements AcaoRotinaJava, ScheduledAc
 
 		try {
 
-			System.out.println("While de iteracao");
+			LogCatcher.logInfo("While de iterarEndPoint de titulos de fornecedores");
 
-			String[] response = apiGet2(url
-					+ "/financeiro/clientes/titulos-pagar?quantidade=0"
-					+ "&dataInicial=" + dataFormatada + " 00:00:00" + "&dataFinal="
-					+ dataFormatada + " 23:59:59", token);
+			String[] response = apiGet(url + "/financeiro/clientes/titulos-pagar?quantidade=0" + "&dataInicial="
+					+ dataFormatada + " 00:00:00" + "&dataFinal=" + dataFormatada + " 23:59:59", token);
 
 			int status = Integer.parseInt(response[0]);
-
-			System.out.println("Status teste: " + status);
-
 			String responseString = response[1];
-			System.out.println("response string alunos: " + responseString);
 
-			leituraJSON(tipoEmpresa, mapaInfNaturezaEmp, mapaInfCenCusEmp,   //870
-					mapaInfFinanceiroBanco, mapaInfFinanceiroBaixado,
-					mapaInfNatureza, mapaInfBanco, mapaInfConta,
-					mapaInfFinanceiro, mapaInfCenCus, mapaInfParceiros,
-					response, url, token, codEmp);
+			LogCatcher.logInfo("Status teste: " + status);
+			LogCatcher.logInfo("response string titulos a pagar: " + responseString);
+
+			if (status == 200) {
+				LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida. Processando dados de títulos a pagar...");
+				leituraJSON(tipoEmpresa, mapaInfNaturezaEmp, mapaInfCenCusEmp, // 870
+						mapaInfFinanceiroBanco, mapaInfFinanceiroBaixado, mapaInfNatureza, mapaInfBanco, mapaInfConta,
+						mapaInfFinanceiro, mapaInfCenCus, mapaInfParceiros, response, url, token, codEmp);
+			} else if (status >= 400 && status < 500) {
+				String erroMsg;
+				if (status == 400) {
+					erroMsg = "Erro do Cliente (400 - Requisição Inválida): A requisição para buscar títulos a pagar falhou. Resposta: "
+							+ responseString;
+				} else if (status == 401) {
+					erroMsg = "Erro do Cliente (401 - Não Autorizado): O token de autenticação é inválido ou ausente para títulos a pagar. Resposta: "
+							+ responseString;
+				} else if (status == 403) {
+					erroMsg = "Erro do Cliente (403 - Proibido): Você não tem permissão para acessar títulos a pagar. Resposta: "
+							+ responseString;
+				} else if (status == 404) {
+					erroMsg = "Erro do Cliente (404 - Não Encontrado): O recurso de títulos a pagar solicitado não foi encontrado. Resposta: "
+							+ responseString;
+				} else if (status == 429) {
+					erroMsg = "Erro do Cliente (429 - Muitas Requisições): Limite de taxa da API excedido para títulos a pagar. Resposta: "
+							+ responseString;
+				} else {
+					erroMsg = "Erro do Cliente (" + status
+							+ "): A requisição para buscar títulos a pagar falhou. Resposta: " + responseString;
+				}
+				LogCatcher.logError(erroMsg);
+				selectsParaInsertLog.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'")
+						+ "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+			} else if (status >= 500 && status < 600) {
+				String erroMsg = "Erro do Servidor (" + status
+						+ "): Ocorreu um problema no servidor da API ao buscar títulos a pagar. Resposta: "
+						+ responseString;
+				LogCatcher.logError(erroMsg);
+
+				selectsParaInsertLog.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'")
+						+ "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+			} else {
+				String erroMsg = "Status inesperado (" + status
+						+ "): A API retornou um código não previsto ao buscar títulos a pagar. Resposta: "
+						+ responseString;
+				LogCatcher.logError(erroMsg);
+
+				selectsParaInsertLog.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'")
+						+ "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+			}
 
 		}
 
 		catch (Exception e) {
 			e.printStackTrace();
+			LogCatcher.logError(
+					"Erro na iteração do endpoint de títulos a pagar da empresa " + codEmp + ": " + e.getMessage());
+			LogCatcher.logError(e);
+			throw e;
 		}
 	}
 

@@ -174,6 +174,7 @@ public class AcaoGetFornecedoresCarga implements AcaoRotinaJava, ScheduledAction
 	 	
 	 	@Override
 	 	public void onTime(ScheduledActionContext arg0) {
+	 		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	 	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 	 	    JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 	 	    PreparedStatement pstmt = null;
@@ -634,50 +635,72 @@ public class AcaoGetFornecedoresCarga implements AcaoRotinaJava, ScheduledAction
 	 	    }
 	 	}
 	 	
-	 	public void iterarEndpoint(Map<String, BigDecimal> mapaInfIdParceiros,
-	 			Map<String, BigDecimal> mapaInfParceiros, String url, String token,
-	 			BigDecimal codEmp) throws Exception {
-	 		
-	 		Date dataAtual = new Date();
+		public void iterarEndpoint(Map<String, BigDecimal> mapaInfIdParceiros,
+				Map<String, BigDecimal> mapaInfParceiros, String url, String token,
+				BigDecimal codEmp) throws Exception {
+			
+			Date dataAtual = new Date();
 
-	 		SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
+			SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
 
-	 		String dataFormatada = formato.format(dataAtual);
-	 		
-	 		try {
+			String dataFormatada = formato.format(dataAtual);
+			
+			try {
 
-	 			System.out.println("Método do Job de Fornecedores");
-	 			LogCatcher.logInfo("Método do Job de Fornecedores");
+				LogCatcher.logInfo("IterarEndpoint do titulos de Fornecedores");
 
-	 			String[] response = apiGet2(url
-	 					+ "/financeiro/clientes/fornecedores?" + "quantidade=0"
-	 					+ "&dataInicial=" + dataFormatada + " 00:00:00&dataFinal="
-	 					+ dataFormatada + " 23:59:59", token);
+				String[] response = apiGet2(url
+						+ "/financeiro/clientes/fornecedores?" + "quantidade=0"
+						+ "&dataInicial=" + dataFormatada + " 00:00:00&dataFinal="
+						+ dataFormatada + " 23:59:59", token);
 
-	 			int status = Integer.parseInt(response[0]);
-	 			System.out.println("Status teste: " + status);
-	 			LogCatcher.logInfo("Status teste: " + status);
+				int status = Integer.parseInt(response[0]);
+				String responseString = response[1];
 
-	 			String responseString = response[1];
-	 			System.out.println("response do job: " + responseString);
-	 			LogCatcher.logInfo("response do job: " + responseString);
+				LogCatcher.logInfo("Status teste: " + status);
 
-	 			cadastrarFornecedor(mapaInfIdParceiros, mapaInfParceiros,
-	 					response, codEmp);
+				LogCatcher.logInfo("response do job: " + responseString);
 
-	 		} catch (Exception e) {
-	 			e.printStackTrace();
-	 		}
-	 	}
+				if (status == 200) {
+					LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida. Processando dados de fornecedores...");
+					cadastrarFornecedor(mapaInfIdParceiros, mapaInfParceiros,
+							response, codEmp);
+				} else if (status >= 400 && status < 500) {
+					String erroMsg;
+					if (status == 400) {
+						erroMsg = "Erro do Cliente (400 - Requisição Inválida): A requisição para buscar fornecedores falhou. Resposta: " + responseString;
+					} else if (status == 401) {
+						erroMsg = "Erro do Cliente (401 - Não Autorizado): O token de autenticação é inválido ou ausente para fornecedores. Resposta: " + responseString;
+					} else if (status == 403) {
+						erroMsg = "Erro do Cliente (403 - Proibido): Você não tem permissão para acessar fornecedores. Resposta: " + responseString;
+					} else if (status == 404) {
+						erroMsg = "Erro do Cliente (404 - Não Encontrado): O recurso de fornecedores solicitado não foi encontrado. Resposta: " + responseString;
+					} else if (status == 429) {
+						erroMsg = "Erro do Cliente (429 - Muitas Requisições): Limite de taxa da API excedido para fornecedores. Resposta: " + responseString;
+					} else {
+						erroMsg = "Erro do Cliente (" + status + "): A requisição para buscar fornecedores falhou. Resposta: " + responseString;
+					}
+					LogCatcher.logError(erroMsg);
+					 selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+				} else if (status >= 500 && status < 600) {
+					String erroMsg = "Erro do Servidor (" + status + "): Ocorreu um problema no servidor da API ao buscar fornecedores. Resposta: " + responseString;
+					LogCatcher.logError(erroMsg);
+					 selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+				} else {
+					String erroMsg = "Status inesperado (" + status + "): A API retornou um código não previsto ao buscar fornecedores. Resposta: " + responseString;
+					LogCatcher.logError(erroMsg);
+					 selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("\'", "\'\'") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+				}
+
+			} catch (Exception e) {
+				e.printStackTrace();
+				LogCatcher.logError("Erro na iteração do endpoint de fornecedores da empresa " + codEmp + ": " + e.getMessage());
+				LogCatcher.logError(e);
+				throw e;
+			}
+		}
 	 	
-	 	/**
-	 	 * Cadastra fornecedores a partir de uma resposta de API
-	 	 * 
-	 	 * @param mapaInfIdParceiros Mapa de IDs de parceiros existentes
-	 	 * @param mapaInfParceiros Mapa de parceiros existentes
-	 	 * @param response Array contendo status e resposta da API
-	 	 * @param codEmp Código da empresa
-	 	 */
+
 	 	public void cadastrarFornecedor(Map<String, BigDecimal> mapaInfIdParceiros,
 	 	        Map<String, BigDecimal> mapaInfParceiros, String[] response,
 	 	        BigDecimal codEmp) {

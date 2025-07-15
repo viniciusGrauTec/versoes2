@@ -1,7 +1,3 @@
-//
-// Source code recreated from a .class file by IntelliJ IDEA
-// (powered by FernFlower decompiler)
-//
 
 package br.com.sankhya.acoesgrautec.extensions;
 
@@ -13,7 +9,6 @@ import br.com.sankhya.extensions.actionbutton.Registro;
 import br.com.sankhya.jape.EntityFacade;
 import br.com.sankhya.jape.core.JapeSession;
 import br.com.sankhya.jape.dao.JdbcWrapper;
-
 import br.com.sankhya.modelcore.util.EntityFacadeFactory;
 import br.com.sankhya.modelcore.util.SWRepositoryUtils;
 
@@ -60,12 +55,10 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         String threadName = Thread.currentThread().getName();
         Date startTime = new Date();
 
-        System.out.println("=== INÍCIO DO PROCESSAMENTO === Thread: " + threadName + " - Hora: " + startTime);
-        LogCatcher.logInfo("=== INÍCIO DO PROCESSAMENTO === Thread: " + threadName + " - Hora: " + startTime);
+        LogCatcher.logInfo("=== INÍCIO DO doAction Baixa de Fornecedores === Thread: " + threadName + " - Hora: " + startTime);
 
         Registro[] linhas = contexto.getLinhas();
         
-        // Verifica se existe pelo menos 1 linha
         if (linhas.length < 1) {
             contexto.mostraErro("É necessário selecionar pelo menos 1 linha.");
             return;
@@ -73,7 +66,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         
         // Determina quantas linhas processar (máximo 65)
         int linhasParaProcessar = Math.min(linhas.length, 65);
-        System.out.println("Processando " + linhasParaProcessar + " registro(s)");
         LogCatcher.logInfo("Processando " + linhasParaProcessar + " registro(s)");
         
         String dataInicio = contexto.getParam("DTINICIO").toString().substring(0, 10);
@@ -81,7 +73,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         String idForn = (String) contexto.getParam("IDFORN");
 
         try {
-            // Busca e inicializa todos os dados necessários apenas uma vez
             List<Object[]> listInfBancoConta = this.retornarInformacoesBancoConta();
             Map<String, BigDecimal> mapaInfBanco = new HashMap();
             Map<String, BigDecimal> mapaInfConta = new HashMap();
@@ -162,14 +153,12 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                 }
             }
 
-            // Processa cada linha selecionada
             for (int i = 0; i < linhasParaProcessar; i++) {
                 Registro registro = linhas[i];
                 String url = (String)registro.getCampo("URL");
                 String token = (String)registro.getCampo("TOKEN");
                 BigDecimal codEmp = (BigDecimal)registro.getCampo("CODEMP");
                 
-                System.out.println("Processando registro " + (i+1) + " de " + linhasParaProcessar);
                 LogCatcher.logInfo("Processando registro " + (i+1) + " de " + linhasParaProcessar);
                 
                 this.processDateRange(
@@ -194,19 +183,15 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
             contexto.setMensagemRetorno("Período processado com sucesso para " + linhasParaProcessar + " registro(s)!");
             LogCatcher.logInfo("Período processado com sucesso para " + linhasParaProcessar + " registro(s)!");
         } catch (Exception e) {
-            System.out.println("Erro no processamento - Thread: " + threadName);
             LogCatcher.logInfo("Erro no processamento - Thread: " + threadName);
             e.printStackTrace();
             try {
-                // Log para o primeiro registro como referência, se possível
                 if (linhas.length > 0) {
                     Registro primeiroRegistro = linhas[0];
                     String url = (String) primeiroRegistro.getCampo("URL");
                     String token = (String) primeiroRegistro.getCampo("TOKEN");
                     BigDecimal codEmp = (BigDecimal) primeiroRegistro.getCampo("CODEMP");
                     
-                    // Se tiver um método de log similar ao do segundo código
-                    // insertLogIntegracao("Erro ao processar período, Mensagem de erro: " + e.getMessage(), "Erro", url, token);
                 }
             } catch (Exception e1) {
                 e1.printStackTrace();
@@ -215,7 +200,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         } finally {
             if (this.selectsParaInsert.size() > 0) {
                 StringBuilder msgError = new StringBuilder();
-                System.out.println("Entrou na lista do finally: " + this.selectsParaInsert.size());
                 LogCatcher.logInfo("Entrou na lista do finally: " + this.selectsParaInsert.size());
                 int qtdInsert = this.selectsParaInsert.size();
                 int i = 1;
@@ -231,10 +215,8 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                     ++i;
                 }
 
-                System.out.println("Consulta de log: \n" + msgError);
                 LogCatcher.logInfo("Consulta de log: \n" + msgError);
                 
-                // Adapte este método conforme necessário para sua implementação
                 if (linhas.length > 0) {
                     BigDecimal codEmp = (BigDecimal) linhas[0].getCampo("CODEMP");
                     this.insertLogList(msgError.toString(), codEmp);
@@ -242,13 +224,12 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                     this.insertLogList(msgError.toString());
                 }
             }
-            
-            System.out.println("=== FIM DO PROCESSAMENTO === Thread: " + threadName + " - Hora: " + new Date());
-            LogCatcher.logInfo("=== FIM DO PROCESSAMENTO === Thread: " + threadName + " - Hora: " + new Date());
+            LogCatcher.logInfo("=== FIM DO doAction Baixa de Fornecedores === Thread: " + threadName + " - Hora: " + new Date());
         }
     }
 
     public void onTime(ScheduledActionContext arg0) {
+    	LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
         EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
         JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
         PreparedStatement pstmt = null;
@@ -368,7 +349,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                 token = rs.getString("TOKEN");
                 String statusIntegracao = rs.getString("INTEGRACAO");
                 if (!"S".equals(statusIntegracao)) {
-                    System.out.println("Integração desativada para a empresa " + codEmp + " - pulando processamento");
                     LogCatcher.logInfo("Integração desativada para a empresa " + codEmp + " - pulando processamento");
                 } else {
                     this.iterarEndpoint(url, token, codEmp, mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta, mapaInfFinanceiro, mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado, mapaInfFinanceiroValor, mapaInfFinanceiroBanco);
@@ -404,7 +384,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
             jdbc.closeSession();
             if (this.selectsParaInsert.size() > 0) {
                 StringBuilder msgError = new StringBuilder();
-                System.out.println("Entrou na lista do finally: " + this.selectsParaInsert.size());
                 LogCatcher.logInfo("Entrou na lista do finally: " + this.selectsParaInsert.size());
                 int qtdInsert = this.selectsParaInsert.size();
                 int i = 1;
@@ -427,7 +406,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                     ++i;
                 }
 
-                System.out.println("Consulta de log: \n" + msgError);
                 LogCatcher.logInfo("Consulta de log: \n" + msgError);
 
                 try {
@@ -450,7 +428,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
             String dataFinalCompleta = dataFim + " 23:59:59";
             String dataInicialEncoded = URLEncoder.encode(dataInicialCompleta, "UTF-8");
             String dataFinalEncoded = URLEncoder.encode(dataFinalCompleta, "UTF-8");
-            System.out.println("Iniciando processamento de baixas para o período: " + dataInicio + " até " + dataFim);
             LogCatcher.logInfo("Iniciando processamento de baixas para o período: " + dataInicio + " até " + dataFim);
             JSONArray todosRegistros = new JSONArray();
             int pagina = 1;
@@ -462,14 +439,12 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                 if (idForn != null && !idForn.isEmpty()) {
                     String fornecedorEncoded = URLEncoder.encode(idForn, "UTF-8");
                     urlBuilder.append("&fornecedor=").append(fornecedorEncoded);
-                    System.out.println("Processando baixas para o fornecedor: " + idForn);
                     LogCatcher.logInfo("Processando baixas para o fornecedor: " + idForn);
                 }
 
                 String urlCompleta = urlBuilder.toString();
-                System.out.println("URL para baixas (página " + pagina + "): " + urlCompleta);
                 LogCatcher.logInfo("URL para baixas (página " + pagina + "): " + urlCompleta);
-                String[] response = this.apiGet2(urlCompleta, token);
+                String[] response = this.apiGet(urlCompleta, token);
                 int status = Integer.parseInt(response[0]);
                 if (status != 200) {
                     throw new Exception(String.format("Erro na requisição de baixas. Status: %d. Resposta: %s. URL: %s", status, response[1], urlCompleta));
@@ -490,9 +465,11 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
             String[] responseArray = new String[]{String.valueOf(200), todosRegistros.toString()};
             LogCatcher.logInfo("Total de registros de baixas acumulados: " + todosRegistros.length());
+            
+           
             this.efetuarBaixa(responseArray, url, token, codemp, mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta, mapaInfFinanceiro, mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado, mapaInfFinanceiroValor, mapaInfFinanceiroBanco);
+            
         } catch (Exception e) {
-            System.err.println("Erro ao processar baixas para o período " + dataInicio + " até " + dataFim + (idForn != null ? " (Fornecedor: " + idForn + ")" : "") + ": " + e.getMessage());
             LogCatcher.logInfo("Erro ao processar baixas para o período " + dataInicio + " até " + dataFim + (idForn != null ? " (Fornecedor: " + idForn + ")" : "") + ": " + e.getMessage());
             e.printStackTrace();
             throw e;
@@ -505,22 +482,58 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         String dataFormatada = formato.format(dataAtual);
 
         try {
-            String[] response = this.apiGet2(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa" + "?quantidade=0" + "&dataInicial=" + dataFormatada + " 00:00:00&dataFinal=" + dataFormatada + " 23:59:59", token);
-            int status = Integer.parseInt(response[0]);
-            System.out.println("Status teste: " + status);
-            LogCatcher.logInfo("Status teste: " + status);
-            String responseString = response[1];
-            System.out.println("response string baixas: " + responseString);
-            LogCatcher.logInfo("response string baixas: " + responseString);
-            this.efetuarBaixa(response, url, token, codemp, mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta, mapaInfFinanceiro, mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado, mapaInfFinanceiroValor, mapaInfFinanceiroBanco);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+			String[] response = this.apiGet(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa" + "?quantidade=0" + "&dataInicial="
+					+ dataFormatada + " 00:00:00&dataFinal=" + dataFormatada + " 23:59:59", token);
+			int status = Integer.parseInt(response[0]);
+			String responseString = response[1];
 
-    }
+			LogCatcher.logInfo("Status da requisição: " + status);
+			LogCatcher.logInfo("Resposta da API (baixas): " + responseString);
+
+			if (status == 200) {
+				LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida.");
+				this.efetuarBaixa(response, url, token, codemp, 
+						mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta,  mapaInfFinanceiro,
+						mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado,
+						mapaInfFinanceiroValor, mapaInfFinanceiroBanco
+						 );
+			} else if (status >= 400 && status < 500) {
+				String erroMsg = "Erro do Cliente (" + status + "): A requisição para buscar baixas falhou. Resposta: "
+						+ responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''")
+						+ "\', SYSDATE, \'Erro\', " + codemp + ", NULL FROM DUAL");
+			} else if (status >= 500) {
+				String erroMsg = "Erro do Servidor (" + status
+						+ "): Ocorreu um problema no servidor da API ao buscar baixas. Resposta: " + responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''")
+						+ "\', SYSDATE, \'Erro\', " + codemp + ", NULL FROM DUAL");
+			} else {
+				String erroMsg = "Status inesperado (" + status
+						+ "): A API retornou um código não previsto ao buscar baixas. Resposta: " + responseString;
+				LogCatcher.logError(erroMsg);
+				selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''")
+						+ "\', SYSDATE, \'Erro\', " + codemp + ", NULL FROM DUAL");
+			}
+		} catch (NumberFormatException e) {
+			String erroMsg = "Erro de Formato de Número: Não foi possível converter o status da resposta da API para um número inteiro.";
+			LogCatcher.logError(erroMsg);
+			LogCatcher.logError(e);
+			e.printStackTrace();
+			selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''")
+					+ "\', SYSDATE, \'Erro\', " + codemp + ", NULL FROM DUAL");
+		} catch (Exception e) {
+			String erroMsg = "Exceção não tratada ao chamar a API de baixas: " + e.getMessage();
+			LogCatcher.logError(erroMsg);
+			LogCatcher.logError(e); 
+			e.printStackTrace();
+			selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''")
+					+ "\', SYSDATE, \'Erro\', " + codemp + ", NULL FROM DUAL");
+		}
+	}
 
     public void efetuarBaixa(String[] response, String url, String token, BigDecimal codemp, Map<String, BigDecimal> mapaInfTipoTituloTaxa, Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta, Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta, Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco) throws Exception {
-        System.out.println("Entrou no job baixa");
         LogCatcher.logInfo("Entrou no job baixa");
         boolean movBanc = false;
         SimpleDateFormat formatoOriginal = new SimpleDateFormat("yyyy-MM-dd");
@@ -536,15 +549,13 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         SkwServicoCompras sc = null;
         JapeSession.SessionHandle hnd = null;
         hnd = JapeSession.open();
-        LogCatcher.logInfo("Entrou aqui JOBBaixas");
-        String domain = "http://127.0.0.1:8501";
+        LogCatcher.logInfo("Entrou no efetuarBaixa de fornecedores");
         String formaDePagamento = "";
         int count = 0;
         new EnviromentUtils();
 
         try {
-            System.out.println("Teste: " + response[1]);
-            LogCatcher.logInfo("Teste: " + response[1]);
+            LogCatcher.logInfo("Json da api de baixa fornecedores: " + response[1]);
             String response2 = response[1];
             if (response[0].equalsIgnoreCase("200")) {
                 JsonParser parser = new JsonParser();
@@ -593,7 +604,7 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
                     }
 
                     //String[] response1 = this.apiGet2(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa-forma-pagamento" + "?baixa=" + baixaId, token);
-                    String[] response1 = this.apiGet2(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa-forma-pagamento" + "?dataInicial=" + dataBaixa + "&dataFinal=" + dataBaixa, token);
+                    String[] response1 = this.apiGet(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa-forma-pagamento" + "?dataInicial=" + dataBaixa + "&dataFinal=" + dataBaixa, token);
                     JsonParser parser2 = new JsonParser();
                     JsonArray jsonArray2 = parser2.parse(response1[1]).getAsJsonArray();
                     JsonObject jsonObject2 = jsonArray2.get(0).getAsJsonObject();
@@ -699,12 +710,67 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
         }
 
     }
+    
+    public void deleteTgfMbc(BigDecimal nubco, BigDecimal codemp) throws Exception {
+        EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+        JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+        PreparedStatement pstmt = null;
+
+        try {
+            jdbc.openSession();
+            String sqlNota = "DELETE FROM TGFMBC WHERE NUBCO = " + nubco;
+            pstmt = jdbc.getPreparedStatement(sqlNota);
+            pstmt.executeUpdate();
+            System.out.println("Passou do update");
+            LogCatcher.logInfo("Passou do update do deleteTgfMbc");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Deletar Mov. Bancaria: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Deletar Mov. Bancaria: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+
+        } finally {
+            if (pstmt != null) {
+                pstmt.close();
+            }
+
+            jdbc.closeSession();
+        }
+
+    }
+    
+    public void updateFinExtorno(BigDecimal nufin, BigDecimal codemp) throws Exception {
+        EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+        JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+        PreparedStatement pstmt = null;
+
+        try {
+            jdbc.openSession();
+            String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = 0, DHBAIXA = NULL, NUBCO = NULL, CODTIPOPERBAIXA = 0, DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), CODUSUBAIXA = NULL  WHERE NUFIN = " + nufin;
+            pstmt = jdbc.getPreparedStatement(sqlNota);
+            pstmt.executeUpdate();
+            System.out.println("Passou do update");
+            LogCatcher.logInfo("Passou do update do updateFinExtorno");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Extornar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Extornar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+        } finally {
+            if (pstmt != null) {
+                pstmt.close();
+            }
+
+            jdbc.closeSession();
+        }
+
+    }
+    
+    
 
     private static final int MAX_REQUESTS_PER_MINUTE = 60;
 	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
 	private static final Queue<Long> requestTimestamps = new LinkedList<>();
 
-	public synchronized String[] apiGet2(String ur, String token) throws Exception {
+	public synchronized String[] apiGet(String ur, String token) throws Exception {
 	    long currentTime = System.currentTimeMillis();
 	    requestTimestamps.removeIf(timestamp -> 
 	        currentTime - timestamp > ONE_MINUTE_IN_MS);
@@ -1074,32 +1140,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
     }
 
-    public void deleteTgfMbc(BigDecimal nubco, BigDecimal codemp) throws Exception {
-        EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-        JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-        PreparedStatement pstmt = null;
-
-        try {
-            jdbc.openSession();
-            String sqlNota = "DELETE FROM TGFMBC WHERE NUBCO = " + nubco;
-            pstmt = jdbc.getPreparedStatement(sqlNota);
-            pstmt.executeUpdate();
-            System.out.println("Passou do update");
-            LogCatcher.logInfo("Passou do update do deleteTgfMbc");
-        } catch (SQLException e) {
-            e.printStackTrace();
-            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Deletar Mov. Bancaria: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Deletar Mov. Bancaria: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-
-        } finally {
-            if (pstmt != null) {
-                pstmt.close();
-            }
-
-            jdbc.closeSession();
-        }
-
-    }
 
     public void deleteTgfFin(BigDecimal nufin, BigDecimal codemp) throws Exception {
         EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1128,31 +1168,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
     }
 
-    public void updateFinExtorno(BigDecimal nufin, BigDecimal codemp) throws Exception {
-        EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-        JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-        PreparedStatement pstmt = null;
-
-        try {
-            jdbc.openSession();
-            String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = 0, DHBAIXA = NULL, NUBCO = NULL, CODTIPOPERBAIXA = 0, DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), CODUSUBAIXA = NULL  WHERE NUFIN = " + nufin;
-            pstmt = jdbc.getPreparedStatement(sqlNota);
-            pstmt.executeUpdate();
-            System.out.println("Passou do update");
-            LogCatcher.logInfo("Passou do update do updateFinExtorno");
-        } catch (SQLException e) {
-            e.printStackTrace();
-            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Extornar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Extornar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-        } finally {
-            if (pstmt != null) {
-                pstmt.close();
-            }
-
-            jdbc.closeSession();
-        }
-
-    }
 
     public void updateFinComVlrBaixa(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta, BigDecimal vlrBaixa, BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta, BigDecimal outrosAcrescimos, BigDecimal codemp) throws Exception {
         EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();

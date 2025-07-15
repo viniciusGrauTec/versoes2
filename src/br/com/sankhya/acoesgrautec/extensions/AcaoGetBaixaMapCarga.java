@@ -36,19 +36,26 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
+
+//import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper;
 
 import org.activiti.engine.impl.util.json.JSONArray;
 import org.cuckoo.core.ScheduledAction;
 import org.cuckoo.core.ScheduledActionContext;
 
+
+
 public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	private List<String> selectsParaInsert = new ArrayList();
 	private EnviromentUtils util = new EnviromentUtils();
+	
 	static {
 		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	}
@@ -300,8 +307,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 	public void onTime(ScheduledActionContext arg0) {
-		System.out.println("/*************** Inicio - JobGetBaixaMap *****************/ ");
-		LogCatcher.logInfo("\n/*************** Inicio - onTime GetBaixaMap *****************/ ");
+		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 		long tempoAnterior = System.currentTimeMillis();
 		long tempoInicio = System.currentTimeMillis();
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -314,6 +320,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		String token = "";
 		String matricula = "";
 		int count = 0;
+		LogCatcher.logInfo("\n/*************** Inicio - onTime GetBaixaMap *****************/ ");
 
 		try {
 			LogCatcher.logInfo("Carregando informações de Banco e Conta do Job...");
@@ -484,8 +491,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					mapaInfTipoTituloCodparcCartao.put(codEmpObj + "###" + idExternoObj, codParcCartao);
 				}
 			}
-			//QT PARCELAS
-
 
 			LogCatcher.logInfo("Carregando informações do listInfMenorDataMovBancariaPorConta do Job...");
 			List<Object[]> listInfMenorDataMovBancariaPorConta = this.retornarInformacoesMenorDataMovBancariaPorConta();
@@ -500,7 +505,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			}
 
 			jdbc.openSession();
-			// Modificado para incluir a verificação da flag INTEGRACAO
 			String query = "SELECT CODEMP, URL, TOKEN, INTEGRACAO FROM AD_LINKSINTEGRACAO";
 			pstmt = jdbc.getPreparedStatement(query);
 			rs = pstmt.executeQuery();
@@ -510,17 +514,15 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 						 .next(); tempoAnterior = this.printLogDebug(tempoAnterior,
 					"onTime - updateCarga da empresa(" + codEmp + ")")) {
 				++count;
-				System.out.println("Contagem: " + count);
 				LogCatcher.logInfo("Contagem: " + count);
 				codEmp = rs.getBigDecimal("CODEMP");
 				url = rs.getString("URL");
 				token = rs.getString("TOKEN");
 				String statusIntegracao = rs.getString("INTEGRACAO");
 
-				// Verifica se a integração está ativa para esta empresa
 				if (!"S".equals(statusIntegracao)) {
 					System.out.println("Integração desativada para a empresa " + codEmp + " - pulando processamento");
-					continue; // Pula para a próxima iteração do loop
+					continue;
 				}
 
 				this.iterarEndpoint(url, token, codEmp, mapaInfIdBaixaOrig, mapaInfIdBaixa, mapaInfTipoTituloTaxa,
@@ -530,8 +532,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 				tempoAnterior = this.printLogDebug(tempoAnterior, "onTime - efetuarBaixa da empresa(" + codEmp + ")");
 			}
 
-			System.out.println("Chegou ao final da baixa");
-			System.out.println("\n/*************** Fim - JobGetBaixaMap *****************/");
+			LogCatcher.logInfo("Chegou ao final da baixa");
+			LogCatcher.logInfo("\n/*************** Fim - JobGetBaixaMap *****************/");
 			this.printLogDebug(tempoInicio, "Tempo Total: ");
 		} catch (Exception var71) {
 			Exception e = var71;
@@ -565,9 +567,9 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			jdbc.closeSession();
 			if (this.selectsParaInsert.size() > 0) {
 				StringBuilder msgError = new StringBuilder();
-				System.out.println("Entrou na lista do finally: " + this.selectsParaInsert.size());
+				LogCatcher.logInfo("Entrou na lista do finally: " + this.selectsParaInsert.size());
 				int qtdInsert = this.selectsParaInsert.size();
-				System.out.println("Lista de selects: " + this.selectsParaInsert.toString());
+				LogCatcher.logInfo("Lista de selects: " + this.selectsParaInsert.toString());
 				int i = 1;
 
 				for (String sqlInsert : this.selectsParaInsert) {
@@ -582,7 +584,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 					String sql = sqlInsert.replace("<#NUMUNICO#>", String.valueOf(nuFin));
 					msgError.append(sql);
-					System.out.println("Iteração: " + i + " de " + qtdInsert);
+					LogCatcher.logInfo("Iteração: " + i + " de " + qtdInsert);
 					if (i < qtdInsert) {
 						msgError.append(" \nUNION ALL ");
 					}
@@ -590,7 +592,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					++i;
 				}
 
-				System.out.println("Consulta de log: \n" + msgError);
+				LogCatcher.logInfo("Consulta de log: \n" + msgError);
 
 				try {
 					this.insertLogList(msgError.toString(), codEmp);
@@ -619,7 +621,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			throws Exception {
 
 		try {
-			LogCatcher.logInfo("\nIniciando processDateRange - Empresa: " + codemp + ", Período: " + dataInicio + " a "
+			LogCatcher.logInfo("\nIniciando processDateRange Baixa de Alunos- Empresa: " + codemp + ", Período: " + dataInicio + " a "
 					+ dataFim + ", Matrícula: " + matricula);
 
 			LocalDate startDate = LocalDate.parse(dataInicio);
@@ -650,8 +652,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					}
 
 					String urlCompleta = urlBuilder.toString();
-					System.out.println(
-							"URL para baixas (dia: " + currentDate + ", página " + pagina + "): " + urlCompleta);
 					LogCatcher.logInfo(
 							"Chamando API - Data: " + currentDate + ", Página: " + pagina + ", URL: " + urlCompleta);
 
@@ -672,23 +672,21 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 						LogCatcher.logInfo("Recebidos " + paginaAtual.length() + " registros na página " + pagina
 								+ " para o dia " + currentDate);
-						System.out.println("Dia " + currentDate + ", página " + pagina + ": " + paginaAtual.length()
-								+ " registros. Total acumulado: " + todosRegistrosDoDia.length());
 					} else {
-						System.err.println("Erro na requisição: Status " + status);
+						LogCatcher.logInfo("Erro na requisição: Status " + status);
 						break;
 					}
 				}
 
 				if (todosRegistrosDoDia.length() > 0) {
-					System.out.println("Processando " + todosRegistrosDoDia.length()
+					LogCatcher.logInfo("Processando " + todosRegistrosDoDia.length()
 							+ " registros de baixas para o dia " + currentDate);
 
 					String[] response = new String[] { "200", todosRegistrosDoDia.toString() };
 
-					System.out.println("Dados sendo enviados para efetuarBaixa:");
-					System.out.println("Tamanho do array: " + todosRegistrosDoDia.length());
-					System.out.println("Conteúdo do todosRegistrosDoDia: " + todosRegistrosDoDia.toString());
+					LogCatcher.logInfo("Dados sendo enviados para efetuarBaixa:");
+					LogCatcher.logInfo("Tamanho do array: " + todosRegistrosDoDia.length());
+					LogCatcher.logInfo("Conteúdo do todosRegistrosDoDia: " + todosRegistrosDoDia.toString());
 					LogCatcher.logInfo("Chamando efetuarBaixa para o dia " + currentDate + " com "
 							+ todosRegistrosDoDia.length() + " registros.");
 
@@ -732,6 +730,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			int status = Integer.parseInt(response[0]);
 			String responseString = response[1];
 
+			//só printa a partir daqui
 			LogCatcher.logInfo("Status da requisição: " + status);
 			LogCatcher.logInfo("Resposta da API (baixas): " + responseString);
 
@@ -830,6 +829,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 							 Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao, Map<String, BigDecimal> mapaInfIdBaixaParcelas,Map<String, BigDecimal> mapaBaixaIdParaNufin)
 			throws Exception {
 
+		//aqui funciona
 		LogCatcher.logInfo("\nIniciando efetuarBaixa - Empresa: " + codemp + ", com conteúdo da resposta.");
 
 
@@ -858,6 +858,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		String formaDePagamento = "";
 		Map<BigDecimal, String> mapIdBaixaAtual = new HashMap();
 		Map<String, BigDecimal> mapaBaixaEstornada = new HashMap<>();
+		Set<BigDecimal> nufinsJaEstornados = new HashSet<>();
 		
 
 		try {
@@ -878,6 +879,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 			for (JsonElement jsonElement : parser.parse(response[1]).getAsJsonArray()) {
+				
 				JsonObject jsonObject = jsonElement.getAsJsonObject();
 
 				LogCatcher.logInfo("Titulo ID: " + jsonObject.get("titulo_id").getAsInt());
@@ -914,6 +916,11 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					String dataBaixaFormatada = formatoDesejado.format(data);
 					nufin = (BigDecimal) mapaInfFinanceiro.get(codemp + "###" + tituloId);
 					
+					// Verificar se a parcela do Titulo já foi estornado
+	                if (nufinsJaEstornados.contains(nufin)) {
+	                    LogCatcher.logInfo("[CONTROLE] Estorno para o NUFIN " + nufin + " já foi realizado. Pulando repetição.");
+	                    continue; // PULA PARA O PRÓXIMO REGISTRO DO JSON
+	                }
 					
 					// Verificar se o título já foi baixado no banco (TGFFIN)
 					if (tituloJaBaixadoNoBanco(tituloId, codemp)) {
@@ -925,8 +932,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 
-
 					if (jsonObject.has("baixa_estorno_data") && !jsonObject.get("baixa_estorno_data").isJsonNull()) {
+						
 						LogCatcher.logInfo("Detectado estorno para título ID: " + tituloId + " - Data estorno: " + dataEstorno);
 
 						dataEstorno = jsonObject.get("baixa_estorno_data").getAsString();
@@ -934,6 +941,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 						LogCatcher.logInfo("Entrou no else de estorno");
 						dataEstorno = null;
 					}
+
 
 					String idExterno = jsonObject.get("local_pagamento_id").getAsString();
 					codBanco = (BigDecimal) mapaInfBanco.get(codemp + "###" + idExterno);
@@ -1053,25 +1061,48 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 							}
 
 
-
+							// Cenário de baixa normal (sem estorno e não baixado ainda) a modificação é daqui pra baixo
+							/*
+							 * remoção do uso de:
+							 * updateFin
+							 * updateFinComVlrBaixa
+							 * updateFinCartao
+							 * updateBaixa
+							 * updateBaixaParcial
+							 * 
+							 * insertMovBancaria
+							 * insertFin
+							 * insertFinCartao
+							 * 
+							 * getMaxNumMbc
+							 * updateNumMbc
+							 * getMaxNumFin
+							 * updateNumFin
+							 */
 							else if (dtMinMovConta != null) {
 								LogCatcher.logInfo("[BAIXA-NORMAL] Processando baixa normal (sem estorno)");
 								LogCatcher.logInfo("[BAIXA-NORMAL] TituloId:" + tituloId + ", NUFIN:" + nufin);
 
 								if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
+									
 									this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo: " + nufin
 											+ " Não Efetuada Pois a Data Minima de Movimentação Bancaria "
 											+ "Para a Conta " + codConta + " é Superior a Data de Baixa: "
 											+ dataBaixaFormatada + "', SYSDATE, 'Aviso', " + codemp + ", '" + idAluno
 											+ "' FROM DUAL");
+									
 								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+									
 									if ("N".equalsIgnoreCase((String) mapaInfFinanceiroBaixado.get(nufin))) {
+										
 										LogCatcher.logInfo("Entrou no codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0");
+										
 										if (vlrBaixa.compareTo((BigDecimal) mapaInfFinanceiroValor.get(nufin)) != 0
 												|| nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
 											if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
 
 												this.updateFinCartao(codTipTit, nufin, codBanco, codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId, codemp, codParc, dtCredito, nsu_Cartao, autorizacao);
+												
 											} else {
 												LogCatcher.logInfo("Atualizando NUFIN: " + nufin + " com valor: " + vlrBaixa);
 
@@ -1409,10 +1440,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 															+ codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '"
 															+ idAluno + "' FROM DUAL");
 										}
-									} else if ("S".equalsIgnoreCase((String) mapaInfFinanceiroBaixado.get(nufin))) {
-										nubco = (BigDecimal) mapaInfFinanceiroBanco.get(nufin);
-										this.estornarTgfFin(nufin, codemp);
-									}
+									} 
 								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0
 										&& countBaixa > 0) {
 									LogCatcher.logInfo("contagem 2");
@@ -1477,13 +1505,11 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 	
 
-	// Dentro da classe AcaoGetBaixaMapCarga.java
-
 	private static final int MAX_REQUESTS_PER_MINUTE = 60;
 	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
 	private static final Queue<Long> requestTimestamps = new LinkedList<>();
-	private static final int MAX_RETRIES = 3; // Número máximo de tentativas
-	private static final long INITIAL_RETRY_DELAY_MS = 2000; // 2 segundos de espera inicial
+	private static final int MAX_RETRIES = 3; 
+	private static final long INITIAL_RETRY_DELAY_MS = 2000; 
 
 	public synchronized String[] apiGet(String ur, String token) throws Exception {
 	    int attempt = 0;
@@ -1496,7 +1522,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	                long oldestRequestTime = requestTimestamps.peek();
 	                long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
 	                if (waitTime > 0) {
-	                    System.out.println("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
 	                    LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
 	                    Thread.sleep(waitTime);
 	                }
@@ -1510,8 +1535,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	            https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 	            https.setRequestProperty("Accept", "application/json");
 	            https.setRequestProperty("Authorization", "Bearer " + token);
-	            https.setConnectTimeout(15000); // 15 segundos de timeout de conexão
-	            https.setReadTimeout(30000); // 30 segundos de timeout de leitura
+	            https.setConnectTimeout(15000); 
+	            https.setReadTimeout(30000); 
 	            https.setDoInput(true);
 
 	            int status = https.getResponseCode();
@@ -1527,7 +1552,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	            reader.close();
 	            https.disconnect();
 
-	            System.out.println("Output from Server .... \n" + status);
 	            LogCatcher.logInfo("Output from Server .... \n" + status);
 
 	            return new String[] { Integer.toString(status), responseContent.toString() };
@@ -1545,7 +1569,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	            }
 	        }
 	    }
-	    // Retorno padrão em caso de falha após todas as tentativas
+
 	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
 	}
 
@@ -1555,7 +1579,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		PreparedStatement pstmt = null;
-
+ 
 		try {
 			jdbc.openSession();
 			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, ";
@@ -1572,7 +1596,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			pstmt.setBigDecimal(3, codConta);
 			pstmt.setBigDecimal(4, nufin);
 			pstmt.executeUpdate();
-			System.out.println("Passou do update");
+			LogCatcher.logInfo("Passou do updateFin");
 		} catch (SQLException e) {
 			e.printStackTrace();
 			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Financeiro Para baixa: "
@@ -1598,7 +1622,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	    PreparedStatement stmt = null;
 
 	    try {
-	        LogCatcher.logInfo("\nIniciando estorno para NUFIN: " + nufin + " - Empresa: " + codemp);
+	        LogCatcher.logInfo("Iniciando estorno para NUFIN: " + nufin + " - Empresa: " + codemp);
 
 	        jdbc.openSession();
 
@@ -1641,7 +1665,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	        LogCatcher.logInfo("Chamando estornarTitulo para NUFIN: " + nufin);
 
-	        // Inserção na tabela AD_ESTORNOINT ANTES de deletar
 	        String insertSql = "INSERT INTO ad_estornoint (titulo_id, status_estorno, descricao) VALUES (?, ?, ?)";
 	        stmt = jdbc.getConnection().prepareStatement(insertSql);
 	        stmt.setBigDecimal(1, nufin);
@@ -1670,8 +1693,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	        jdbc.closeSession();
 	    }
 	}
-
-
 
 
 	private DynamicVO getTituloVO(BigDecimal nufin) throws Exception {
@@ -1731,7 +1752,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			pstmt.setBigDecimal(3, codConta);
 			pstmt.setBigDecimal(4, nufin);
 			pstmt.executeUpdate();
-			System.out.println("Passou do update");
+			LogCatcher.logInfo("Passou do updateFinComVlrBaixa");
 		} catch (SQLException e) {
 			e.printStackTrace();
 			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa: " + e.getMessage().replace("'", "''") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
@@ -1759,12 +1780,12 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			jdbc.openSession();
 			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, AD_VLRDESCINT = " + vlrDesconto + ", " + "VLRINSS = 0, " + "VLRIRF = 0, " + "VLRISS = 0, " + "AD_VLRJUROSINT = " + vlrJuros + ", " + "AD_VLRMULTAINT = " + vlrMulta + ", " + "TIPJURO = null, AD_VLRORIG = VLRDESDOB, " + "VLRDESDOB = " + vlrBaixa + ", " + "TIPMULTA = null, AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos + ", " + "AD_BAIXAID = " + baixaId + ", CODPARC = " + codParc + ", " + "AD_BAIXA_CARTAO = 'S', DTVENC = TO_DATE('" + dtCredito + "', 'YYYY-MM-DD')," + "AD_NSU_CART = '" + nsu_Cartao + "', AD_AUTORIZACAO_CART = '" + autorizacao + "' WHERE nufin = ?";
 			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.setBigDecimal(1, codTipTit); // Corrigido de codtiptit para codTipTit
+			pstmt.setBigDecimal(1, codTipTit); 
 			pstmt.setBigDecimal(2, codBanco);
 			pstmt.setBigDecimal(3, codConta);
 			pstmt.setBigDecimal(4, nufin);
 			pstmt.executeUpdate();
-			System.out.println("Passou do update");
+			LogCatcher.logInfo("Passou do updateFinCartao");
 		} catch (SQLException e) {
 			e.printStackTrace();
 			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa de Cartão: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
@@ -1802,7 +1823,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			int linhasAfetadas = pstmt.executeUpdate();
 
 			LogCatcher.logInfo("[UPDATE TGFFIN] Linhas afetadas: " + linhasAfetadas);
-			System.out.println("Passou do update");
+			LogCatcher.logInfo("Passou do updateBaixa");
 
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -1836,7 +1857,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					+ "CODUSUBAIXA = 0, AD_BAIXAPARCIAL = 'S'  " + "WHERE NUFIN = " + nufin;
 			pstmt = jdbc.getPreparedStatement(sqlNota);
 			pstmt.executeUpdate();
-			System.out.println("Passou do update");
+			LogCatcher.logInfo("Passou do updateBaixaParcial");
 		} catch (SQLException e) {
 			e.printStackTrace();
 			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Parcialmente Um Titulo: " + e.getMessage()
@@ -2012,7 +2033,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		PreparedStatement pstmt = null;
 
 		try {
-			System.out.println("Entrou no UPDATE da flag dos alunos baixa");
+			LogCatcher.logInfo("Entrou no updateResetarAlunos da flag dos alunos baixa");
 			jdbc.openSession();
 			String sqlUpdate = "UPDATE AD_ALUNOS SET INTEGRADO_BAIXA = 'N'";
 			pstmt = jdbc.getPreparedStatement(sqlUpdate);
@@ -2038,7 +2059,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			long tempoAgora = System.currentTimeMillis();
 			long diffInSeconds = tempoAgora - tempoAnterior;
 			tempoAnterior = tempoAgora;
-			System.out.println(msgRetornoLog + " : " + diffInSeconds);
+			LogCatcher.logInfo(msgRetornoLog + " : " + diffInSeconds);
 		}
 
 		return tempoAnterior;
@@ -2250,7 +2271,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		PreparedStatement pstmt = null;
 		EnviromentUtils util = new EnviromentUtils();
-		System.out.println("Chegou no insert do financeiro segundo");
+		LogCatcher.logInfo("Chegou no insertFin do financeiro segundo");
 		BigDecimal nufin = util.getMaxNumFin(true);
 
 		try {
@@ -2289,8 +2310,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		PreparedStatement pstmt = null;
 		EnviromentUtils util = new EnviromentUtils();
-		System.out.println("Chegou no insert do financeiro cartão");
-		LogCatcher.logInfo("Chegou no insert do financeiro cartão");
+		LogCatcher.logInfo("Chegou no insertFinCartao do financeiro cartão");
 		BigDecimal nufinNovo = util.getMaxNumFin(true); // Alterado o nome da variável para evitar conflito
 
 		try {
@@ -2429,7 +2449,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 
-	//retornarInformacoesContagemIdBaixa com ALIAS corrigido
 	public List<Object[]> retornarInformacoesContagemIdBaixa() throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
@@ -2439,7 +2458,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 		try {
 			jdbc.openSession();
-			// CORREÇÃO: Adicionado alias para AD_BAIXAID
 			String sql = "\tSELECT COUNT(0) AS C, CODEMP, AD_BAIXAID AS BAIXAID FROM TGFFIN WHERE RECDESP = 1 AND PROVISAO = 'N' AND DHBAIXA IS NOT NULL AND AD_IDALUNO IS NOT NULL GROUP BY CODEMP, AD_BAIXAID";
 			pstmt = jdbc.getPreparedStatement(sql);
 			rs = pstmt.executeQuery();
@@ -2447,7 +2465,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			while (rs.next()) {
 				Object[] ret = new Object[3];
 				ret[0] = rs.getBigDecimal("CODEMP");
-				ret[1] = rs.getString("BAIXAID"); // Agora usando o alias correto
+				ret[1] = rs.getString("BAIXAID"); 
 				ret[2] = rs.getBigDecimal("C");
 				listRet.add(ret);
 			}

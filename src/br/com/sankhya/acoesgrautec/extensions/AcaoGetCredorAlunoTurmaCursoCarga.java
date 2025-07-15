@@ -178,6 +178,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	 */
 	   @Override
 	   public void onTime(ScheduledActionContext arg0) {
+		   LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	       String threadName = Thread.currentThread().getName();
 	       Date startTime = new Date();
 
@@ -588,8 +589,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	}
 
 	
-	
-	// Itera sobre o endpoint de alunos para processar e cadastrar informações.
+
 	public void iterarEndpoint(Map<String, BigDecimal> mapaInfAlunos,
 	        Map<String, BigDecimal> mapaInfParceiros, String url, String token,
 	        BigDecimal codEmp) throws Exception {
@@ -599,8 +599,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	    String dataFormatada = formato.format(dataAtual);
 
 	    try {
-	        System.out.println("While de iteração");
-	        LogCatcher.logInfo("\nIniciando iteração de endpoint para empresa " + codEmp);
+	        LogCatcher.logInfo("\nIniciando iteração de endpoint para alunos na empresa: " + codEmp);
 
 	        String urlFinal = url + "/alunos" + "?dataInicial=" + dataFormatada + " 00:00:00&dataFinal=" +
 	                dataFormatada + " 23:59:59&quantidade=0";
@@ -608,12 +607,40 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        String[] response = apiGet2(urlFinal, token);
 
 	        int status = Integer.parseInt(response[0]);
-	        System.out.println("Status teste: " + status);
-	        System.out.println("response string: " + response[1]);
+	        String responseString = response[1];
+
 
 	        LogCatcher.logInfo("\nStatus da chamada: " + status + " | URL: " + urlFinal);
 
-	        cadastrarCredorAlunoCursoTurma(mapaInfAlunos, mapaInfParceiros, response[1], codEmp);
+	        if (status == 200) {
+	            LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida. Processando dados...");
+	            cadastrarCredorAlunoCursoTurma(mapaInfAlunos, mapaInfParceiros, responseString, codEmp);
+	        } else if (status >= 400 && status < 500) {
+	            String erroMsg;
+	            if (status == 400) {
+	                erroMsg = "Erro do Cliente (400 - Requisição Inválida): A requisição para buscar alunos falhou. Resposta: " + responseString;
+	            } else if (status == 401) {
+	                erroMsg = "Erro do Cliente (401 - Não Autorizado): O token de autenticação é inválido ou ausente. Resposta: " + responseString;
+	            } else if (status == 403) {
+	                erroMsg = "Erro do Cliente (403 - Proibido): Você não tem permissão para acessar este recurso. Resposta: " + responseString;
+	            } else if (status == 404) {
+	                erroMsg = "Erro do Cliente (404 - Não Encontrado): O recurso solicitado não foi encontrado. Resposta: " + responseString;
+	            } else if (status == 429) {
+	                erroMsg = "Erro do Cliente (429 - Muitas Requisições): Limite de taxa da API excedido. Resposta: " + responseString;
+	            } else {
+	                erroMsg = "Erro do Cliente (" + status + "): A requisição para buscar alunos falhou. Resposta: " + responseString;
+	            }
+	            LogCatcher.logError(erroMsg);
+	             selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+	        } else if (status >= 500 && status < 600) {
+	            String erroMsg = "Erro do Servidor (" + status + "): Ocorreu um problema no servidor da API ao buscar alunos. Resposta: " + responseString;
+	            LogCatcher.logError(erroMsg);
+	             selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+	        } else {
+	            String erroMsg = "Status inesperado (" + status + "): A API retornou um código não previsto ao buscar alunos. Resposta: " + responseString;
+	            LogCatcher.logError(erroMsg);
+	             selectsParaInsert.add("SELECT <#NUMUNICO#>, \'" + erroMsg.replace("'", "''") + "\', SYSDATE, \'Erro\', " + codEmp + ", NULL FROM DUAL");
+	        }
 
 	    } catch (Exception e) {
 	        e.printStackTrace();

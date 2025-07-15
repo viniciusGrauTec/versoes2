@@ -62,7 +62,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	}
 	
-	// Estrutura para armazenar informações detalhadas sobre erros de títulos
 		private static class ErroTitulo {
 			private String idTitulo;
 			private BigDecimal valor;
@@ -303,27 +302,24 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		                               ". Tipo Empresa: " + tipoEmpresa + ". Erro: " + e.getMessage();
 		            LogCatcher.logError("Erro ao processar período " + startStr + " até " + endStr + 
                             ". Tipo Empresa: " + tipoEmpresa + ". Erro: " + e.getMessage());
-		            
-		            // Registrar erro detalhado do título
+		  
 		            ErroTitulo erro = new ErroTitulo(
-		                "Período: " + startStr + " a " + endStr,  // ID do título (neste caso, usamos o período)
-		                null,                                     // Valor (não disponível neste contexto)
-		                "N/A",                                    // Data de vencimento (não disponível)
-		                "ERRO_PROCESSAMENTO",                     // Tipo de erro
-		                e.getMessage(),                           // Razão do erro
-		                codEmp                                    // Código da empresa
+		                "Período: " + startStr + " a " + endStr,  
+		                null,                               
+		                "N/A",                              
+		                "ERRO_PROCESSAMENTO",                   
+		                e.getMessage(),                          
+		                codEmp                                   
 		            );
 		            
-		            // Adicionar erro ao contador da empresa
 		            ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
 		            if (contador != null) {
 		                contador.adicionarErro(erro);
 		            }
 		            
-		            // Adicionar à lista geral de erros
+
 		            errosTitulos.add(erro);
 		            
-		            // Adicionar ao log de erros para SQL
 		            selectsParaInsertLog.add(erro.formatarParaSql());
 		            
 		            insertLogIntegracao(mensagemErro, "ERRO", matricula, codEmp);
@@ -339,12 +335,12 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	
 		@Override
 		public void onTime(ScheduledActionContext arg0) {
+			LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 		    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		    resetarTotalTitulos();
 		    JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		    BigDecimal codEmp = BigDecimal.ZERO;
 		    
-		    // Limpar contadores e erros antes de iniciar
 		    contadoresPorEmpresa.clear();
 		    errosTitulos.clear();
 
@@ -359,17 +355,13 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		        
 		        imprimirTotalTitulos();
 		        
-		        // Gerar resumo por empresa
 		        StringBuilder resumoEmpresas = new StringBuilder("Resumo do processamento JOB:\n");
 		        for (Map.Entry<BigDecimal, ContadorEmpresa> entry : contadoresPorEmpresa.entrySet()) {
 		            resumoEmpresas.append(entry.getValue().gerarResumo(entry.getKey())).append("\n");
 		        }
 		        
-		        // Registrar resumo no log
 		        insertLogIntegracao(resumoEmpresas.toString(), "INFO", "", null);
 
-		        System.out.println("Finalizou o financeiro dos alunos Empresas");
-		        System.out.println(resumoEmpresas.toString());
 		        LogCatcher.logInfo("\nFinalizou o financeiro dos alunos Empresas");
 		        LogCatcher.logInfo(resumoEmpresas.toString());
 
@@ -450,7 +442,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            String token = rs.getString("TOKEN");
 		            String tipoEmpresa = rs.getString("TIPEMP");
 		            
-		            // Inicializar contador para esta empresa
 		            if (!contadoresPorEmpresa.containsKey(codEmp)) {
 		                contadoresPorEmpresa.put(codEmp, new ContadorEmpresa());
 		            }
@@ -491,35 +482,29 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		                );
 		                
 		                LogCatcher.logInfo("Empresa " + codEmp + " processada com sucesso pelo Job");
-		                System.out.println("Empresa " + codEmp + " processada com sucesso pelo Job");
 		                empresasProcessadas++;
 		                
 		            } catch (IllegalArgumentException configEx) {
 		            	
 		                String msgErro = "Erro de configuração para empresa " + codEmp + ": " + configEx.getMessage();
-		                System.err.println(msgErro);
 		                LogCatcher.logError(msgErro);
 		                
-		                // Registrar erro detalhado
 		                ErroTitulo erro = new ErroTitulo(
-		                    "Configuração",                // ID do título
-		                    null,                          // Valor
-		                    "N/A",                         // Data de vencimento
-		                    "ERRO_CONFIG",                 // Tipo de erro
-		                    configEx.getMessage(),         // Razão do erro
-		                    codEmp                         // Código da empresa
+		                    "Configuração",             
+		                    null,                         
+		                    "N/A",                         
+		                    "ERRO_CONFIG",               
+		                    configEx.getMessage(),        
+		                    codEmp                       
 		                );
-		                
-		                // Adicionar erro ao contador da empresa
+
 		                ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
 		                if (contador != null) {
 		                    contador.adicionarErro(erro);
 		                }
-		                
-		                // Adicionar à lista geral de erros
+
 		                errosTitulos.add(erro);
 		                
-		                // Adicionar ao log de erros para SQL
 		                selectsParaInsertLog.add(erro.formatarParaSql());
 		                
 		                insertLogIntegracao(msgErro, "ERRO_CONFIG", "", codEmp);
@@ -531,27 +516,23 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		                               + sqlEx.getMessage() + " (Código: " + sqlEx.getErrorCode() + ")";
 		                System.err.println(msgErro);
 		                LogCatcher.logError(msgErro);
-		                
-		                // Registrar erro detalhado
+
 		                ErroTitulo erro = new ErroTitulo(
-		                    "SQL",                                    // ID do título
-		                    null,                                     // Valor
-		                    "N/A",                                    // Data de vencimento
-		                    "ERRO_SQL",                               // Tipo de erro
-		                    sqlEx.getMessage() + " (Código: " + sqlEx.getErrorCode() + ")", // Razão do erro
-		                    codEmp                                    // Código da empresa
+		                    "SQL",                         
+		                    null,                            
+		                    "N/A",                                 
+		                    "ERRO_SQL",                              
+		                    sqlEx.getMessage() + " (Código: " + sqlEx.getErrorCode() + ")", 
+		                    codEmp                                  
 		                );
 		                
-		                // Adicionar erro ao contador da empresa
 		                ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
 		                if (contador != null) {
 		                    contador.adicionarErro(erro);
 		                }
 		                
-		                // Adicionar à lista geral de erros
 		                errosTitulos.add(erro);
 		                
-		                // Adicionar ao log de erros para SQL
 		                selectsParaInsertLog.add(erro.formatarParaSql());
 		                
 		                insertLogIntegracao(msgErro, "ERRO_SQL", "", codEmp);
@@ -568,27 +549,23 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		                    msgErro += " [" + stackTrace[0].getClassName() + "." + stackTrace[0].getMethodName() 
 		                             + " - linha: " + stackTrace[0].getLineNumber() + "]";
 		                }
-		                
-		                // Registrar erro detalhado
+
 		                ErroTitulo erro = new ErroTitulo(
-		                    "Processamento",                          // ID do título
-		                    null,                                     // Valor
-		                    "N/A",                                    // Data de vencimento
-		                    "ERRO",                                   // Tipo de erro
-		                    ex.getMessage() + " - Tipo: " + ex.getClass().getName(), // Razão do erro
-		                    codEmp                                    // Código da empresa
+		                    "Processamento",                          
+		                    null,                                   
+		                    "N/A",                                   
+		                    "ERRO",                                   
+		                    ex.getMessage() + " - Tipo: " + ex.getClass().getName(), 
+		                    codEmp                                    
 		                );
-		                
-		                // Adicionar erro ao contador da empresa
+
 		                ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
 		                if (contador != null) {
 		                    contador.adicionarErro(erro);
 		                }
 		                
-		                // Adicionar à lista geral de erros
 		                errosTitulos.add(erro);
 		                
-		                // Adicionar ao log de erros para SQL
 		                selectsParaInsertLog.add(erro.formatarParaSql());
 		                
 		                insertLogIntegracao(msgErro, "ERRO", "", codEmp);
@@ -641,27 +618,21 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		        }
 		    }
 		}
-		
-		// Método modificado para registrar erros de títulos
+
 		public void registrarErroTitulo(String idTitulo, BigDecimal valor, String dataVencimento, 
 		        String tipoErro, String razaoErro, BigDecimal codEmp) {
-		    
-		    // Criar objeto de erro
+
 		    ErroTitulo erro = new ErroTitulo(idTitulo, valor, dataVencimento, tipoErro, razaoErro, codEmp);
-		    
-		    // Adicionar à lista geral de erros
+
 		    errosTitulos.add(erro);
-		    
-		    // Adicionar ao contador da empresa
+
 		    ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
 		    if (contador != null) {
 		        contador.adicionarErro(erro);
 		    }
-		    
-		    // Adicionar ao log de erros para SQL
+
 		    selectsParaInsertLog.add(erro.formatarParaSql());
-		    
-		    // Registrar no log de integração
+
 		    try {
 		        insertLogIntegracao(erro.formatarParaLog(), tipoErro, "", codEmp);
 		    } catch (Exception e) {
@@ -901,7 +872,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 			Map<String, BigDecimal> mapaInfCenCus, Map<String, BigDecimal> mapaInfCenCusAluno,
 			Map<String, BigDecimal> mapaInfAlunos, String url, String token, BigDecimal codEmp) throws Exception {
 
-		LogCatcher.logInfo("=== iterarEndpoint do JOB de Alunos Titulos iniciado ===");
+		LogCatcher.logInfo("=== iterarEndpoint de Alunos Titulos iniciado ===");
 		LogCatcher.logInfo("tipoEmpresa: " + tipoEmpresa);
 		LogCatcher.logInfo("codEmp: " + codEmp);
 		LogCatcher.logInfo("\nURL base: " + url);
