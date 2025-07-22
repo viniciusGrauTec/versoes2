@@ -1,7 +1,6 @@
 
 package br.com.sankhya.acoesgrautec.extensions;
 
-import br.com.sankhya.acoesgrautec.services.SkwServicoCompras;
 import br.com.sankhya.acoesgrautec.util.EnviromentUtils;
 import br.com.sankhya.extensions.actionbutton.AcaoRotinaJava;
 import br.com.sankhya.extensions.actionbutton.ContextoAcao;
@@ -533,182 +532,134 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 		}
 	}
 
-    public void efetuarBaixa(String[] response, String url, String token, BigDecimal codemp, Map<String, BigDecimal> mapaInfTipoTituloTaxa, Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta, Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta, Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco) throws Exception {
-        LogCatcher.logInfo("Entrou no job baixa");
-        boolean movBanc = false;
+    public void efetuarBaixa(String[] apiResponse, String url, String token, BigDecimal codemp, Map<String, BigDecimal> mapaInfTipoTituloTaxa, Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta, Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta, Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco) throws Exception {
+        boolean movimentacaoBancariaEfetuada = false;
         SimpleDateFormat formatoOriginal = new SimpleDateFormat("yyyy-MM-dd");
         SimpleDateFormat formatoDesejado = new SimpleDateFormat("dd/MM/yyyy");
-        Date dataAtual = new Date();
-        formatoOriginal.format(dataAtual);
-        BigDecimal codTipTit = BigDecimal.ZERO;
-        BigDecimal codBanco = BigDecimal.ZERO;
-        BigDecimal codConta = BigDecimal.ZERO;
-        BigDecimal nubco = BigDecimal.ZERO;
-        BigDecimal nufin = BigDecimal.ZERO;
-        String dataEstorno = "";
-        SkwServicoCompras sc = null;
+        
+        BigDecimal codTipoTitulo = BigDecimal.ZERO;
+        BigDecimal codigoBanco = BigDecimal.ZERO;
+        BigDecimal codigoConta = BigDecimal.ZERO;
+        BigDecimal numeroUnicoMovimentacaoBancaria = BigDecimal.ZERO;
+        BigDecimal numeroUnicoFinanceiro = BigDecimal.ZERO;
+        String dataEstorno = null;
+        
         JapeSession.SessionHandle hnd = null;
-        hnd = JapeSession.open();
-        LogCatcher.logInfo("Entrou no efetuarBaixa de fornecedores");
-        String formaDePagamento = "";
-        int count = 0;
-        new EnviromentUtils();
 
         try {
-            LogCatcher.logInfo("Json da api de baixa fornecedores: " + response[1]);
-            String response2 = response[1];
-            if (response[0].equalsIgnoreCase("200")) {
+            hnd = JapeSession.open();
+            LogCatcher.logInfo("Iniciando processamento de baixas no método efetuarBaixa.");
+
+            if (apiResponse[0].equalsIgnoreCase("200")) {
                 JsonParser parser = new JsonParser();
+                JsonArray baixasArray = parser.parse(apiResponse[1]).getAsJsonArray();
 
-                for(JsonElement jsonElement : parser.parse(response[1]).getAsJsonArray()) {
-                	
-                    JsonObject jsonObject = jsonElement.getAsJsonObject();
-                    String tituloId = jsonObject.get("titulo_id").getAsString();
-                    BigDecimal vlrBaixa = new BigDecimal(jsonObject.get("baixa_valor").getAsString());
-                    BigDecimal vlrJuros = (BigDecimal)Optional.ofNullable(jsonObject.get("baixa_juros")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
-                    BigDecimal vlrMulta = (BigDecimal)Optional.ofNullable(jsonObject.get("baixa_multa")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
-                    BigDecimal vlrDesconto = (BigDecimal)Optional.ofNullable(jsonObject.get("baixa_desconto")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
-                    BigDecimal vlrOutrosAcrescimos = (BigDecimal)Optional.ofNullable(jsonObject.get("baixa_outros_acrescimos")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
-                    String dataBaixa = jsonObject.get("baixa_data").getAsString();
-                    String baixaId = jsonObject.get("baixa_id").getAsString();
-                    Date data = formatoOriginal.parse(dataBaixa);
-                    String dataBaixaFormatada = formatoDesejado.format(data);
-                    nufin = (BigDecimal)mapaInfFinanceiro.get(codemp + "###" + tituloId);
+                for(JsonElement jsonElement : baixasArray) {
+                    LogCatcher.logInfo("**INÍCIO DO LAÇO DE PROCESSAMENTO DE BAIXA DE FORNECEDOR**");
                     
+                    JsonObject baixaJson = jsonElement.getAsJsonObject();
+                    String tituloId = baixaJson.get("titulo_id").getAsString();
+                    BigDecimal valorBaixa = new BigDecimal(baixaJson.get("baixa_valor").getAsString());
+                    BigDecimal valorJuros = Optional.ofNullable(baixaJson.get("baixa_juros")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+                    BigDecimal valorMulta = Optional.ofNullable(baixaJson.get("baixa_multa")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+                    BigDecimal valorDesconto = Optional.ofNullable(baixaJson.get("baixa_desconto")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+                    BigDecimal valorOutrosAcrescimos = Optional.ofNullable(baixaJson.get("baixa_outros_acrescimos")).filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+                    String dataBaixaStr = baixaJson.get("baixa_data").getAsString();
+                    String baixaId = baixaJson.get("baixa_id").getAsString();
+                    Date dataBaixa = formatoOriginal.parse(dataBaixaStr);
+                    String dataBaixaFormatada = formatoDesejado.format(dataBaixa);
+                    numeroUnicoFinanceiro = mapaInfFinanceiro.get(codemp + "###" + tituloId);
                     
-                    if (jsonObject.has("baixa_estorno_data")) {
-                        if (!jsonObject.get("baixa_estorno_data").isJsonNull()) {
-                            //LogCatcher.logInfo("Entrou no if de estorno");
-                            dataEstorno = jsonObject.get("baixa_estorno_data").getAsString();
-                        } else {
-                            dataEstorno = null;
-                        }
+                    if (baixaJson.has("baixa_estorno_data") && !baixaJson.get("baixa_estorno_data").isJsonNull()) {
+                        dataEstorno = baixaJson.get("baixa_estorno_data").getAsString();
+                    } else {
+                        dataEstorno = null;
                     }
 
-                    String idExterno = jsonObject.get("local_pagamento_id").getAsString();
-                    codBanco = (BigDecimal)mapaInfBanco.get(codemp + "###" + idExterno);
-                    System.out.println("Banco: " + codBanco);
-                    LogCatcher.logInfo("Banco: " + codBanco);
-                    codConta = (BigDecimal)mapaInfConta.get(codemp + "###" + idExterno);
-                    System.out.println("Conta: " + codConta);
-                    LogCatcher.logInfo("Conta: " + codConta);
-
-                    try {
-                        System.out.println("Pausando por 1 segundo antes de chamar a API...");
-                        LogCatcher.logInfo("Pausando por 1 segundo antes de chamar a API...");
-                        Thread.sleep(1000L);
-                    } catch (InterruptedException e) {
-                        System.err.println("Thread interrompida durante o sleep: " + e.getMessage());
-                        LogCatcher.logInfo("Thread interrompida durante o sleep: " + e.getMessage());
-                        Thread.currentThread().interrupt();
-                    }
-
-                    //String[] response1 = this.apiGet2(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa-forma-pagamento" + "?baixa=" + baixaId, token);
-                    String[] response1 = this.apiGet(url + "/financeiro" + "/clientes" + "/titulos-pagar-baixa-forma-pagamento" + "?dataInicial=" + dataBaixa + "&dataFinal=" + dataBaixa, token);
-                    JsonParser parser2 = new JsonParser();
-                    JsonArray jsonArray2 = parser2.parse(response1[1]).getAsJsonArray();
-                    JsonObject jsonObject2 = jsonArray2.get(0).getAsJsonObject();
-                    String baixaPagamentoVlr = jsonObject2.get("forma_pagamento_valor").getAsString();
-                    String baixaFormaPagamentoId = jsonObject2.get("forma_pagamento_id").getAsString();
-                    formaDePagamento = baixaFormaPagamentoId.trim();
-                    codTipTit = (BigDecimal)Optional.ofNullable((BigDecimal)mapaInfTipoTitulo.get(codemp + "###" + baixaFormaPagamentoId)).orElse(BigDecimal.ZERO);
-                    BigDecimal taxaCartao = (BigDecimal)Optional.ofNullable((BigDecimal)mapaInfTipoTituloTaxa.get(codemp + "###" + baixaFormaPagamentoId)).orElse(BigDecimal.ZERO);
+                    String idLocalPagamento = baixaJson.get("local_pagamento_id").getAsString();
+                    codigoBanco = mapaInfBanco.get(codemp + "###" + idLocalPagamento);
+                    LogCatcher.logInfo("Banco: " + codigoBanco);
+                    codigoConta = mapaInfConta.get(codemp + "###" + idLocalPagamento);
+                    LogCatcher.logInfo("Conta: " + codigoConta);
+                    
+                    String[] formaPagamentoResponse = this.apiGet(url + "/financeiro/clientes/titulos-pagar-baixa-forma-pagamento?baixa=" + baixaId, token);
+                    JsonParser formaPagamentoParser = new JsonParser();
+                    JsonArray formaPagamentoArray = formaPagamentoParser.parse(formaPagamentoResponse[1]).getAsJsonArray();
+                    JsonObject formaPagamentoJson = formaPagamentoArray.get(0).getAsJsonObject();
+                    
+                    String formaPagamentoId = formaPagamentoJson.get("forma_pagamento_id").getAsString().trim();
+                    codTipoTitulo = Optional.ofNullable(mapaInfTipoTitulo.get(codemp + "###" + formaPagamentoId)).orElse(BigDecimal.ZERO);
+                    BigDecimal taxaCartao = Optional.ofNullable(mapaInfTipoTituloTaxa.get(codemp + "###" + formaPagamentoId)).orElse(BigDecimal.ZERO);
                     
                     if (taxaCartao.compareTo(BigDecimal.ZERO) != 0) {
-                        vlrBaixa = vlrBaixa.subtract(vlrBaixa.multiply(taxaCartao).divide(BigDecimal.valueOf(100L)));
+                        valorBaixa = valorBaixa.subtract(valorBaixa.multiply(taxaCartao).divide(BigDecimal.valueOf(100L)));
                     }
 
-                    System.out.println("estorno: " + dataEstorno);
-                    LogCatcher.logInfo("estorno: " + dataEstorno);
-                    System.out.println("Data estorno: " + jsonObject.get("baixa_estorno_data"));
-                    LogCatcher.logInfo("Data estorno: " + jsonObject.get("baixa_estorno_data"));
+                    LogCatcher.logInfo("Data de estorno: " + (dataEstorno != null ? dataEstorno : "N/A"));
                     
-                    if (nufin != null && nufin.compareTo(BigDecimal.ZERO) != 0) {
-                        System.out.println("Achou nufin pra baixar: " + nufin);
-                        LogCatcher.logInfo("Achou nufin pra baixar: " + nufin);
-                        Date dtMinMovConta = (Date)mapaInfMenorDataMovBancariaPorConta.get(Long.parseLong(codConta.toString()));
-                        System.out.println("dtMinMovConta: " + dtMinMovConta);
-                        LogCatcher.logInfo("dtMinMovConta: " + dtMinMovConta);
+                    if (numeroUnicoFinanceiro != null && numeroUnicoFinanceiro.compareTo(BigDecimal.ZERO) != 0) {
+                        LogCatcher.logInfo("Financeiro encontrado para baixa: " + numeroUnicoFinanceiro);
+                        Date dataMinimaMovimentacaoConta = mapaInfMenorDataMovBancariaPorConta.get(Long.parseLong(codigoConta.toString()));
+                        LogCatcher.logInfo("Data mínima de movimentação da conta: " + dataMinimaMovimentacaoConta);
                         
-                        if (dataEstorno == null) {
-                            if (dtMinMovConta != null) {
-                                if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
-                                    this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo " + nufin + " Não Efetuada Pois a Data Minima de Movimentação Bancaria " + "Para a Conta " + codConta + " é Superior a Data de Baixa: " + dataBaixaFormatada + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
-                                    LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo " + nufin + " Não Efetuada Pois a Data Minima de Movimentação Bancaria " + "Para a Conta " + codConta + " é Superior a Data de Baixa: " + dataBaixaFormatada + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
-                                } else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
-                                    if ("N".equalsIgnoreCase((String)mapaInfFinanceiroBaixado.get(nufin))) {
-                                        System.out.println("Chegou no update do efetuarBaixa");
-                                        LogCatcher.logInfo("Chegou no update do efetuarBaixa");
-                                        if (vlrBaixa.compareTo((BigDecimal)mapaInfFinanceiroValor.get(nufin)) == 0) {
-                                            System.out.println("Entrou no if do valor do efetuarBaixa");
-                                            LogCatcher.logInfo("Entrou no if do valor do efetuarBaixa");
-                                            this.updateFin(codTipTit, nufin, codBanco, codConta, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, codemp);
-                                        } else {
-                                            System.out.println("Entrou no else do valor do efetuarBaixa");
-                                            LogCatcher.logInfo("Entrou no else do valor do efetuarBaixa");
-                                            this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, codemp);
-                                        }
-
-                                        System.out.println("vlrDesconto: " + vlrDesconto);
-                                        System.out.println("vlrJuros: " + vlrJuros);
-                                        System.out.println("vlrMulta: " + vlrMulta);
-                                        
-                                        LogCatcher.logInfo("vlrDesconto: " + vlrDesconto);
-                                        LogCatcher.logInfo("vlrJuros: " + vlrJuros);
-                                        LogCatcher.logInfo("vlrMulta: " + vlrMulta);
-                                        
-                                        nubco = this.insertMovBancaria(codConta, vlrBaixa, nufin, dataBaixaFormatada, codemp);
-                                        movBanc = true;
-                                        System.out.println("Passou da mov bancaria: " + nubco);
-                                        System.out.println("vlrBaixa: " + vlrBaixa);
-                                        
-                                        LogCatcher.logInfo("Passou da mov bancaria: " + nubco);
-                                        LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
-                                        
-                                        this.updateBaixa(nufin, nubco, vlrBaixa, dataBaixaFormatada, codemp);
+                        if (dataEstorno == null) { // Processamento de baixa normal
+                            if (dataMinimaMovimentacaoConta != null && (dataBaixa.before(dataMinimaMovimentacaoConta) || dataBaixa.equals(dataMinimaMovimentacaoConta))) {
+                                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo " + numeroUnicoFinanceiro + " Não Efetuada Pois a Data Minima de Movimentação Bancaria Para a Conta " + codigoConta + " é Superior ou Igual a Data de Baixa: " + dataBaixaFormatada + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
+                            } else if (codTipoTitulo != null && codTipoTitulo.compareTo(BigDecimal.ZERO) != 0) {
+                                if ("N".equalsIgnoreCase(mapaInfFinanceiroBaixado.get(numeroUnicoFinanceiro))) {
+                                    LogCatcher.logInfo("Iniciando atualização do financeiro.");
+                                    if (valorBaixa.compareTo(mapaInfFinanceiroValor.get(numeroUnicoFinanceiro)) == 0) {
+                                        this.updateFin(codTipoTitulo, numeroUnicoFinanceiro, codigoBanco, codigoConta, valorDesconto, valorJuros, valorMulta, valorOutrosAcrescimos, codemp);
                                     } else {
-                                        System.out.println("Financeiro " + nufin + " já baixado");
-                                        LogCatcher.logInfo("Financeiro " + nufin + " já baixado");
+                                        this.updateFinComVlrBaixa(codTipoTitulo, numeroUnicoFinanceiro, codigoBanco, codigoConta, valorBaixa, valorDesconto, valorJuros, valorMulta, valorOutrosAcrescimos, codemp);
                                     }
+
+                                    LogCatcher.logInfo("Valores de ajuste: Desconto=" + valorDesconto + ", Juros=" + valorJuros + ", Multa=" + valorMulta);
+                                    
+                                    numeroUnicoMovimentacaoBancaria = this.insertMovBancaria(codigoConta, valorBaixa, numeroUnicoFinanceiro, dataBaixaFormatada, codemp);
+                                    movimentacaoBancariaEfetuada = true;
+                                    LogCatcher.logInfo("Movimentação bancária inserida com NUBCO: " + numeroUnicoMovimentacaoBancaria);
+                                    
+                                    this.updateBaixa(numeroUnicoFinanceiro, numeroUnicoMovimentacaoBancaria, valorBaixa, dataBaixaFormatada, baixaId, codemp);
+                                    
                                 } else {
-                                    this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento: " + formaDePagamento + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
-                                    LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento: " + formaDePagamento + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
+                                    LogCatcher.logInfo("Financeiro " + numeroUnicoFinanceiro + " já baixado. Pulando.");
                                 }
                             } else {
-                                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: " + codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
-                                LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: " + codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
+                                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento: " + formaPagamentoId + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
                             }
-                        } else if ("S".equalsIgnoreCase((String)mapaInfFinanceiroBaixado.get(nufin))) {
-                            nubco = (BigDecimal)mapaInfFinanceiroBanco.get(nufin);
-                            this.updateFinExtorno(nufin, codemp);
-                            this.deleteTgfMbc(nubco, codemp);
-                            this.deleteTgfFin(nufin, codemp);
+                        } else { // Processamento de estorno
+                            if ("S".equalsIgnoreCase(mapaInfFinanceiroBaixado.get(numeroUnicoFinanceiro))) {
+                                numeroUnicoMovimentacaoBancaria = mapaInfFinanceiroBanco.get(numeroUnicoFinanceiro);
+                                this.updateFinExtorno(numeroUnicoFinanceiro, codemp);
+                                this.deleteTgfMbc(numeroUnicoMovimentacaoBancaria, codemp);
+                                this.deleteTgfFin(numeroUnicoFinanceiro, codemp);
+                                LogCatcher.logInfo("Estorno do financeiro " + numeroUnicoFinanceiro + " e movimentação bancária " + numeroUnicoMovimentacaoBancaria + " realizado com sucesso.");
+                            } else {
+                                LogCatcher.logInfo("Financeiro " + numeroUnicoFinanceiro + " não está baixado para estorno. Pulando.");
+                            }
                         }
                     } else {
-                        LogCatcher.logInfo("Não foi possível encontrar financeiro com id externo " + tituloId);
+                        this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Não foi possível encontrar financeiro com ID externo: " + tituloId + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+                        LogCatcher.logInfo("Não foi possível encontrar financeiro com ID externo " + tituloId);
                     }
                 }
             } else {
-                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Resposta da API invalida ou vazia: codigo: " + response[0] + "\nResposta: " + response[1] + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-                LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Resposta da API invalida ou vazia: codigo: " + response[0] + "\nResposta: " + response[1] + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Resposta da API inválida ou vazia: código: " + apiResponse[0] + "\nResposta: " + apiResponse[1] + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
             }
-        } catch (Exception var58) {
-            Exception e = var58;
-            var58.printStackTrace();
-            if (movBanc) {
-                this.updateFinExtorno(nufin, codemp);
-                this.deleteTgfMbc(nubco, codemp);
-                LogCatcher.logInfo("Apagou mov bank dentro do efetuarBaixa");
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (movimentacaoBancariaEfetuada) {
+                this.updateFinExtorno(numeroUnicoFinanceiro, codemp);
+                this.deleteTgfMbc(numeroUnicoMovimentacaoBancaria, codemp);
+                LogCatcher.logInfo("Rollback da movimentação bancária e financeiro devido a erro.");
             }
-
-            try {
-                this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas dos Fornecedores: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-                LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas dos Fornecedores: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-            } catch (Exception e1) {
-                e1.printStackTrace();
+            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas: " + e.getMessage().replace("\'", "\'\'") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+        } finally {
+            if (hnd != null) {
+                JapeSession.close(hnd);
             }
         }
-
     }
     
     public void deleteTgfMbc(BigDecimal nubco, BigDecimal codemp) throws Exception {
@@ -721,7 +672,6 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
             String sqlNota = "DELETE FROM TGFMBC WHERE NUBCO = " + nubco;
             pstmt = jdbc.getPreparedStatement(sqlNota);
             pstmt.executeUpdate();
-            System.out.println("Passou do update");
             LogCatcher.logInfo("Passou do update do deleteTgfMbc");
         } catch (SQLException e) {
             e.printStackTrace();
@@ -1199,7 +1149,7 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
     }
 
-    public void updateBaixa(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada, BigDecimal codemp) throws Exception {
+    public void updateBaixa(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada, String baixaId, BigDecimal codemp) throws Exception {
         EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
         JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
         PreparedStatement pstmt = null;
@@ -1207,15 +1157,20 @@ public class AcaoGetBaixaFornecedoresCarga implements AcaoRotinaJava, ScheduledA
 
         try {
             jdbc.openSession();
-            String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = " + vlrDesdob + ", " + "DHBAIXA = '" + dataBaixaFormatada + "', " + "NUBCO = " + nubco + ", " + "CODTIPOPERBAIXA = 1500, " + "DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1500), " + "CODUSUBAIXA = " + USUARIO_PADRAO + " WHERE NUFIN = " + nufin;
+            String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = ?, DHBAIXA = TO_DATE(?, 'DD/MM/YYYY'), NUBCO = ?, CODTIPOPERBAIXA = 1500, DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1500), CODUSUBAIXA = ?, AD_BAIXAID = ? WHERE NUFIN = ?";
             pstmt = jdbc.getPreparedStatement(sqlNota);
+            pstmt.setBigDecimal(1, vlrDesdob);
+            pstmt.setString(2, dataBaixaFormatada);
+            pstmt.setBigDecimal(3, nubco);
+            pstmt.setBigDecimal(4, USUARIO_PADRAO);
+            pstmt.setString(5, baixaId);
+            pstmt.setBigDecimal(6, nufin);
             pstmt.executeUpdate();
-            System.out.println("Passou do update");
-            LogCatcher.logInfo("Passou do update");
+            LogCatcher.logInfo("Passou do update da baixa");
         } catch (SQLException e) {
             e.printStackTrace();
             this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+            LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Titulo: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + "' FROM DUAL");
         } finally {
             if (pstmt != null) {
                 pstmt.close();

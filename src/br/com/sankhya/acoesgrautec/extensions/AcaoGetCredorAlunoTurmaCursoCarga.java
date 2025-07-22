@@ -55,10 +55,8 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	       String threadName = Thread.currentThread().getName();
 	       Date startTime = new Date();
 
-	       System.out.println("=== INÍCIO DO BOTÃO DE AÇÃO === Thread: " + threadName + " - Hora: " + startTime);
 	       LogCatcher.logInfo("\n=== INÍCIO DO BOTÃO DE AÇÃO DO CADASTRO DE ALUNO=== Thread: " + threadName + " - Hora: " + startTime);
 
-	       System.out.println("Iniciando processamento de dados");
 	       LogCatcher.logInfo("Iniciando processamento de dados.");
 
 	       Registro[] linhas = contexto.getLinhas();
