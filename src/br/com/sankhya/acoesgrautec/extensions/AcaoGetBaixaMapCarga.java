@@ -946,44 +946,61 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 				baixaHelper.addListener(new CustomFieldsListener());
 				baixaHelper.addListener(new AcompanhamentoBaixaListener());
 				
-				//calculo de juros desligado evitando a validação do campo TIPTIT
 				DadosBaixa dadosBaixa = baixaHelper.montaDadosBaixa(dataBaixa, false, false);
 
-			    BigDecimal valorPagoPelaApi = jsonObject.get("baixa_valor").getAsBigDecimal();
-			    BigDecimal valorDevidoCalculado = BigDecimal.valueOf(dadosBaixa.getValoresBaixa().getVlrTotal());
-
-			    int comparacao = valorPagoPelaApi.compareTo(valorDevidoCalculado);
-
-			    if (comparacao < 0) {
-			        LogCatcher.logInfo("Valor pago (" + valorPagoPelaApi + ") é MENOR que o devido (" + valorDevidoCalculado + "). Ação: Gerar Pendência.");
-			        dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MENOR_PENDENCIA);
-			    } else if (comparacao > 0) {
-			        LogCatcher.logInfo("Valor pago (" + valorPagoPelaApi + ") é MAIOR que o devido (" + valorDevidoCalculado + "). Ação: Gerar Crédito.");
-			        dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MAIOR_CREDITO);
-			    }
-			    
-			    dadosBaixa.getValoresBaixa().setVlrTotal(valorPagoPelaApi.doubleValue());
-				
-				
-				
+		        BigDecimal valorPagoPelaApi = jsonObject.get("baixa_valor").getAsBigDecimal();
+		        BigDecimal valorDevidoCalculado = BigDecimal.valueOf(dadosBaixa.getValoresBaixa().getVlrTotal());
+		        JsonArray formasPagamento = jsonObject.getAsJsonArray("formas_de_pagamento");
+		        
 				dadosBaixa.getValoresBaixa().setVlrJuros(jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue());
 				dadosBaixa.getValoresBaixa().setVlrMulta(jsonObject.get("baixa_multa").getAsBigDecimal().doubleValue());
 				dadosBaixa.getValoresBaixa().setVlrDesconto(jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue());
 				
 				dadosBaixa.getValoresBaixa().setTipoJuros(TipoJurosMulta.INCLUSO);
 	            dadosBaixa.getValoresBaixa().setTipoMulta(TipoJurosMulta.INCLUSO);
+
+		        int comparacao = valorPagoPelaApi.compareTo(valorDevidoCalculado);
+
+		        if (comparacao > 0) {
+		            BigDecimal diferenca = valorPagoPelaApi.subtract(valorDevidoCalculado); 
+		            LogCatcher.logInfo(String.format("Valor pago (%s) é MAIOR que o devido (%s). A diferença de R$ %s será tratada como JUROS.", valorPagoPelaApi, valorDevidoCalculado, diferenca));
+		            double jurosDaApi = jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue();
+		            dadosBaixa.getValoresBaixa().setVlrJuros(jurosDaApi + diferenca.doubleValue());	            
+		            dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MAIOR_JUROS);
+
+		        } else if (comparacao < 0) {
+		            BigDecimal diferenca = valorDevidoCalculado.subtract(valorPagoPelaApi); 
+
+		            if (formasPagamento.size() == 1) {
+		                LogCatcher.logInfo(String.format("Valor pago (%s) é MENOR que o devido (%s) com pagamento único. A diferença de R$ %s será tratada como DESCONTO.", valorPagoPelaApi, valorDevidoCalculado, diferenca));
+		                double descontoDaApi = jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue();
+		                dadosBaixa.getValoresBaixa().setVlrDesconto(descontoDaApi + diferenca.doubleValue());
+		                
+		                dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MENOR_DESCONTO);
+		            } else {
+		                LogCatcher.logInfo(String.format("Valor pago (%s) é MENOR que o devido (%s) com múltiplos pagamentos. Será gerada uma PENDÊNCIA para a diferença.", valorPagoPelaApi, valorDevidoCalculado));
+		                
+		                dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MENOR_PENDENCIA);
+		            }
+		        }
+			    
+			    dadosBaixa.getValoresBaixa().setVlrTotal(valorPagoPelaApi.doubleValue());
+		        if(comparacao <= 0) dadosBaixa.getValoresBaixa().setVlrJuros(jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue());
+		        if(comparacao >= 0 || formasPagamento.size() > 1) dadosBaixa.getValoresBaixa().setVlrDesconto(jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue());
+						        
 				
+
+		        dadosBaixa.getValoresBaixa().setVlrTotal(valorPagoPelaApi.doubleValue());
 				String idExterno = jsonObject.get("local_pagamento_id").getAsString();
 				dadosBaixa.getDadosBancarios().setCodConta(mapaInfConta.get(codemp + "###" + idExterno));
 				dadosBaixa.getDadosBancarios().setCodBanco(mapaInfBanco.get(codemp + "###" + idExterno));
 
 
-				JsonArray formasPagamento = jsonObject.getAsJsonArray("formas_de_pagamento");
 				
 				
 				dadosBaixa.getVariosTiposTitulos().clear();
-
 				FinanceiroVO modeloPagamentoVO = (FinanceiroVO) financeiroOriginalVO.buildClone().wrapInterface(FinanceiroVO.class);
+				
 				modeloPagamentoVO.setAceptTransientProperties(true);
 				modeloPagamentoVO.setProperty("AD_VLRDESCINT", jsonObject.get("baixa_desconto").getAsBigDecimal());
 				modeloPagamentoVO.setProperty("AD_VLRMULTAINT", jsonObject.get("baixa_multa").getAsBigDecimal());
@@ -1013,11 +1030,11 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	                } else {
 	                     voPagamento.setProperty("AD_BAIXA_CARTAO", "N");
 	                }
-
-
-	                dadosBaixa.addTipoTitulo(voPagamento);
+	                dadosBaixa.addTipoTitulo(voPagamento);	            
 	            }
-
+				
+				   baixaHelper.baixar(dadosBaixa);
+				   
 			    } finally {
 			        LogCatcher.logInfo("[INFO] Desativando bypass de validação do dono do caixa.");
 			        JapeSession.putProperty("ignorar.validacao.usuario.caixa", null);
@@ -1122,47 +1139,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
 	}
 
-	public void updateFin(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
-						  BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta, BigDecimal vlrOutrosAcrescimos,
-						  BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
- 
-		try {
-			jdbc.openSession();
-			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, ";
-			sqlNota = sqlNota + "AD_VLRDESCINT = " + vlrDesconto + ", ";
-			sqlNota = sqlNota + "VLRINSS = 0, VLRIRF = 0, VLRISS = 0, ";
-			sqlNota = sqlNota + "AD_VLRMULTAINT = " + vlrMulta + ", ";
-			sqlNota = sqlNota + "AD_VLRJUROSINT = " + vlrJuros + ", AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos;
-			sqlNota = sqlNota + ", TIPJURO = null, ";
-			sqlNota = sqlNota + "TIPMULTA = null";
-			sqlNota = sqlNota + " WHERE nufin = ?";
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.setBigDecimal(1, codtiptit);
-			pstmt.setBigDecimal(2, codBanco);
-			pstmt.setBigDecimal(3, codConta);
-			pstmt.setBigDecimal(4, nufin);
-			pstmt.executeUpdate();
-			LogCatcher.logInfo("Passou do updateFin");
-		} catch (SQLException e) {
-			e.printStackTrace();
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Financeiro Para baixa: "
-					+ e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Financeiro Para baixa: "
-					+ e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-
-	}
-
 
 
 	public void estornarTgfFin(BigDecimal nufin, BigDecimal codemp) throws Exception {
@@ -1225,9 +1201,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	        int inserted = stmt.executeUpdate();
 	        LogCatcher.logInfo("Registro inserido em ad_estornoint para NUFIN: " + nufin + " - Linhas inseridas: " + inserted);
 
-	        deletarTitulo(nufin);
-	        LogCatcher.logInfo("Título estornado e removido da TGFFIN com sucesso: " + nufin);
-	        LogCatcher.logInfo("Título estornado com sucesso: " + nufin);
 
 	    } catch (Exception e) {
 	        LogCatcher.logInfo("[ERRO] Falha ao estornar título NUFIN: " + nufin + " - Erro: " + e.getMessage());
@@ -1267,163 +1240,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		}
 	}
 
-	private void deletarTitulo(BigDecimal nufin) throws Exception {
-		JdbcWrapper jdbc = EntityFacadeFactory.getDWFFacade().getJdbcWrapper();
-
-		jdbc.openSession();
-		String sql = "DELETE FROM TGFFIN WHERE NUFIN = ?";
-
-		try (PreparedStatement pstmt = jdbc.getPreparedStatement(sql)) {
-			pstmt.setBigDecimal(1, nufin);
-			pstmt.executeUpdate();
-		}
-	}
 
 
-
-
-	public void updateFinComVlrBaixa(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
-									 BigDecimal vlrBaixa, BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta,
-									 BigDecimal vlrOutrosAcrescimos, String baixaId, BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, AD_VLRDESCINT = "
-					+ vlrDesconto + ", " + "VLRINSS = 0, " + "VLRIRF = 0, " + "VLRISS = 0, " + "AD_VLRJUROSINT = "
-					+ vlrJuros + ", " + "AD_VLRMULTAINT = " + vlrMulta + ", "
-					+ "TIPJURO = null, AD_VLRORIG = VLRDESDOB, " + "VLRDESDOB = " + vlrBaixa + ", "
-					+ "TIPMULTA = null, AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos + ", AD_BAIXAID = " + baixaId
-					+ " WHERE nufin = ?";
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.setBigDecimal(1, codtiptit);
-			pstmt.setBigDecimal(2, codBanco);
-			pstmt.setBigDecimal(3, codConta);
-			pstmt.setBigDecimal(4, nufin);
-			pstmt.executeUpdate();
-			LogCatcher.logInfo("Passou do updateFinComVlrBaixa");
-		} catch (SQLException e) {
-			e.printStackTrace();
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa: " + e.getMessage().replace("'", "''") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa: " + e.getMessage().replace("'", "''") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-
-	}
-
-
-	public void updateFinCartao(BigDecimal codTipTit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
-								BigDecimal vlrBaixa, BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta,
-								BigDecimal vlrOutrosAcrescimos, String baixaId, BigDecimal codemp,
-								BigDecimal codParc, String dtCredito, String nsu_Cartao, String autorizacao) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, AD_VLRDESCINT = " + vlrDesconto + ", " + "VLRINSS = 0, " + "VLRIRF = 0, " + "VLRISS = 0, " + "AD_VLRJUROSINT = " + vlrJuros + ", " + "AD_VLRMULTAINT = " + vlrMulta + ", " + "TIPJURO = null, AD_VLRORIG = VLRDESDOB, " + "VLRDESDOB = " + vlrBaixa + ", " + "TIPMULTA = null, AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos + ", " + "AD_BAIXAID = " + baixaId + ", CODPARC = " + codParc + ", " + "AD_BAIXA_CARTAO = 'S', DTVENC = TO_DATE('" + dtCredito + "', 'YYYY-MM-DD')," + "AD_NSU_CART = '" + nsu_Cartao + "', AD_AUTORIZACAO_CART = '" + autorizacao + "' WHERE nufin = ?";
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.setBigDecimal(1, codTipTit); 
-			pstmt.setBigDecimal(2, codBanco);
-			pstmt.setBigDecimal(3, codConta);
-			pstmt.setBigDecimal(4, nufin);
-			pstmt.executeUpdate();
-			LogCatcher.logInfo("Passou do updateFinCartao");
-		} catch (SQLException e) {
-			e.printStackTrace();
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa de Cartão: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa de Cartão: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-	}
-
-
-	public void updateBaixa(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada,
-							String baixaId, BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-
-			String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = " + vlrDesdob + ", " + "DHBAIXA = '" + dataBaixaFormatada
-					+ "', " + "NUBCO = " + nubco + ", " + "CODTIPOPERBAIXA = 1400, "
-					+ "DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), "
-					+ "CODUSUBAIXA = 0, AD_BAIXAID = " + baixaId + " " + "WHERE NUFIN = " + nufin;
-
-			LogCatcher.logInfo("[UPDATE TGFFIN] Executando atualização da baixa - NUFIN: " + nufin + ", NUBCO: " + nubco
-					+ ", VLRBAIXA: " + vlrDesdob + ", DHBAIXA: " + dataBaixaFormatada + ", AD_BAIXAID: " + baixaId
-					+ ", Empresa: " + codemp);
-			LogCatcher.logInfo("[SQL EXECUTADO] " + sqlNota);
-
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			int linhasAfetadas = pstmt.executeUpdate();
-
-			LogCatcher.logInfo("[UPDATE TGFFIN] Linhas afetadas: " + linhasAfetadas);
-			LogCatcher.logInfo("Passou do updateBaixa");
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			String msgErro = "Erro Ao Baixar Titulo: " + e.getMessage();
-			LogCatcher
-					.logError("SELECT <#NUMUNICO#>, '" + msgErro + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert
-					.add("SELECT <#NUMUNICO#>, '" + msgErro + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-	}
-
-
-	public void updateBaixaParcial(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada,
-								   BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-			String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = " + vlrDesdob + ", " + "DHBAIXA = '" + dataBaixaFormatada
-					+ "', " + "NUBCO = " + nubco + ", " + "CODTIPOPERBAIXA = 1400, "
-					+ "DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), "
-					+ "CODUSUBAIXA = 0, AD_BAIXAPARCIAL = 'S'  " + "WHERE NUFIN = " + nufin;
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.executeUpdate();
-			LogCatcher.logInfo("Passou do updateBaixaParcial");
-		} catch (SQLException e) {
-			e.printStackTrace();
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Parcialmente Um Titulo: " + e.getMessage()
-					+ "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Parcialmente Um Titulo: " + e.getMessage()
-					+ "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-
-	}
 
 	public void insertLogIntegracao(String descricao, String status) throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1452,106 +1270,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	}
 
-	public BigDecimal insertMovBancaria(BigDecimal contaBancaria, BigDecimal vlrDesdob, BigDecimal nufin,
-										String dataBaixaFormatada, BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		EnviromentUtils util = new EnviromentUtils();
-		BigDecimal nubco = util.getMaxNumMbc();
-		LogCatcher.logInfo("Gerado NUBCO: " + nubco + " | Conta bancária: " + contaBancaria + " | Empresa: " + codemp);
 
-		try {
-			jdbc.openSession();
-			String sqlUpdate = "INSERT INTO TGFMBC (NUBCO, CODLANC, DTLANC, CODTIPOPER, DHTIPOPER, DTCONTAB, HISTORICO, CODCTABCOINT, NUMDOC, VLRLANC, TALAO, PREDATA, CONCILIADO, DHCONCILIACAO, ORIGMOV, NUMTRANSF, RECDESP, DTALTER, DTINCLUSAO, CODUSU, VLRMOEDA, SALDO, CODCTABCOCONTRA, NUBCOCP, CODPDV)  VALUES ("
-					+ nubco + ", " + "1, " + "'" + dataBaixaFormatada + "'" + ", " + "1400, "
-					+ "(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), " + "NULL, "
-					+ "(SELECT HISTORICO FROM TGFFIN WHERE NUFIN = " + nufin + "), " + contaBancaria + ", " + "0, "
-					+ vlrDesdob + ", " + "NULL, " + "'" + dataBaixaFormatada + "', " + "'N', " + "NULL, " + "'F', "
-					+ "NULL, " + "1, " + "SYSDATE, " + "SYSDATE, " + "0, " + "0, " + vlrDesdob + ", " + "NULL,  "
-					+ "NULL, " + "NULL) ";
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-			LogCatcher.logInfo("Inserido NUBCO: " + nubco + " na TGFMBC para NUFIN: " + nufin + " | Conta: " + contaBancaria + " | Empresa: " + codemp);
-
-		} catch (Exception se) {
-			se.printStackTrace();
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Inserir Mov. Bancaria: "
-					+ se.getMessage().replace("'", "\"") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Inserir Mov. Bancaria: "
-					+ se.getMessage().replace("'", "\"") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			if (jdbc != null) {
-				jdbc.closeSession();
-			}
-
-		}
-
-		return nubco;
-	}
-
-	public BigDecimal getMaxNumMbc() throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		ResultSet rs = null;
-		BigDecimal id = BigDecimal.ZERO;
-
-		try {
-			this.updateNumMbc();
-			jdbc.openSession();
-			String sqlNota = "SELECT MAX(ULTCOD) AS ULTCOD FROM TGFNUM WHERE ARQUIVO = 'TGFMBC'";
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			rs = pstmt.executeQuery();
-			if (rs.next()) {
-				id = rs.getBigDecimal("ULTCOD");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			throw e;
-		} finally {
-			if (rs != null) {
-				rs.close();
-			}
-
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-
-		return id;
-	}
-
-	public void updateNumMbc() throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-			String sqlUpdate = "UPDATE TGFNUM SET ULTCOD = NVL(ULTCOD, 0) + 1  WHERE ARQUIVO = 'TGFMBC'";
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			if (jdbc != null) {
-				jdbc.closeSession();
-			}
-
-		}
-
-	}
 
 	public void updateFlagAlunoIntegrado(String idAluno) throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1817,147 +1536,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 
-	public BigDecimal insertFin(BigDecimal nufinOrig, BigDecimal vlrDesdob, BigDecimal codTipTit, BigDecimal codemp) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		EnviromentUtils util = new EnviromentUtils();
-		LogCatcher.logInfo("Chegou no insertFin do financeiro segundo");
-		BigDecimal nufin = util.getMaxNumFin(true);
-
-		try {
-			jdbc.openSession();
-			String sqlUpdate = "INSERT INTO TGFFIN         (NUFIN,          NUNOTA,          NUMNOTA,          ORIGEM,          RECDESP,          CODEMP,          CODCENCUS,          CODNAT,          CODTIPOPER,          DHTIPOPER,          CODTIPOPERBAIXA,          DHTIPOPERBAIXA,          CODPARC,          CODTIPTIT,          VLRDESDOB,          VLRDESC,          VLRBAIXA,          CODBCO,          CODCTABCOINT,          DTNEG,          DHMOV,          DTALTER,          DTVENC,          DTPRAZO,          DTVENCINIC,          TIPJURO,          TIPMULTA,          HISTORICO,          TIPMARCCHEQ,          AUTORIZADO,          BLOQVAR,          INSSRETIDO,          ISSRETIDO,          PROVISAO,          RATEADO,          TIMBLOQUEADA,          IRFRETIDO,          TIMTXADMGERALU,          VLRDESCEMBUT,          VLRINSS,          VLRIRF,          VLRISS,          VLRJURO,          VLRJUROEMBUT,          VLRJUROLIB,          VLRJURONEGOC,          VLRMOEDA,          VLRMOEDABAIXA,          VLRMULTA,          VLRMULTAEMBUT,          VLRMULTALIB,          VLRMULTANEGOC,          VLRPROV,          VLRVARCAMBIAL,          VLRVENDOR,          ALIQICMS,          BASEICMS,          CARTAODESC,          CODMOEDA,          CODPROJ,          CODVEICULO,          CODVEND,          DESPCART,          NUMCONTRATO,          ORDEMCARGA,          CODUSU,         AD_IDEXTERNO,         AD_IDALUNO, AD_NUFINORIG, AD_BAIXAPARCIAL)          (SELECT " + nufin + ", NULL, 0, 'F', recDesp ,codemp ,codCenCus ,codNat ,codTipOper ,(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = TGFFIN.codTipOper), 0, (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), codparc ," + codTipTit + ", " + vlrDesdob + ", 0, 0, CODBCO, CODCTABCOINT, DTNEG , SYSDATE, SYSDATE, DTVENC , SYSDATE, DTVENCINIC , 1 , 1 , null , 'I' , 'N' , 'N' , 'N' , 'N' , 'N' , 'N' , 'N' , 'S' , 'S' , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, AD_IDALUNO, " + nufinOrig + ", 'S' FROM TGFFIN WHERE NUFIN = " + nufinOrig + ")";
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			se.printStackTrace();
-
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			try {
-				if (pstmt != null) {
-					pstmt.close();
-				}
-
-				if (jdbc != null) {
-					jdbc.closeSession();
-				}
-			} catch (Exception se) {
-				se.printStackTrace();
-			}
-
-		}
-
-		return nufin;
-	}
-
-
-
-	public BigDecimal insertFinCartao(BigDecimal nufinOrig, BigDecimal vlrDesdob, BigDecimal codTipTit, BigDecimal codemp,
-									  BigDecimal codParc, String dtCredito, String baixaId) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		EnviromentUtils util = new EnviromentUtils();
-		LogCatcher.logInfo("Chegou no insertFinCartao do financeiro cartão");
-		BigDecimal nufinNovo = util.getMaxNumFin(true); // Alterado o nome da variável para evitar conflito
-
-		try {
-			jdbc.openSession();
-			String sqlUpdate = "INSERT INTO TGFFIN (NUFIN, NUNOTA, NUMNOTA, ORIGEM, RECDESP, CODEMP, CODCENCUS, CODNAT, CODTIPOPER, DHTIPOPER, CODTIPOPERBAIXA, DHTIPOPERBAIXA, CODPARC, CODTIPTIT, VLRDESDOB, VLRDESC, VLRBAIXA, CODBCO, CODCTABCOINT, DTNEG, DHMOV, DTALTER, DTVENC, DTPRAZO, DTVENCINIC, TIPJURO, TIPMULTA, HISTORICO, TIPMARCCHEQ, AUTORIZADO, BLOQVAR, INSSRETIDO, ISSRETIDO, PROVISAO, RATEADO, TIMBLOQUEADA, IRFRETIDO, TIMTXADMGERALU, VLRDESCEMBUT, VLRINSS, VLRIRF, VLRISS, VLRJURO, VLRJUROEMBUT, VLRJUROLIB, VLRJURONEGOC, VLRMOEDA, VLRMOEDABAIXA, VLRMULTA, VLRMULTAEMBUT, VLRMULTALIB, VLRMULTANEGOC, VLRPROV, VLRVARCAMBIAL, VLRVENDOR, ALIQICMS, BASEICMS, CARTAODESC, CODMOEDA, CODPROJ, CODVEICULO, CODVEND, DESPCART, NUMCONTRATO, ORDEMCARGA, CODUSU, AD_IDEXTERNO, AD_IDALUNO, AD_NUFINORIG, AD_BAIXAPARCIAL, AD_BAIXA_CARTAO, AD_BAIXAID, AD_AUTORIZACAO_CART, AD_NSU_CART) " +
-					"(SELECT " + nufinNovo + ", NULL, 0, 'F', recDesp, codemp, codCenCus, codNat, codTipOper, " +
-					"(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = TGFFIN.codTipOper), 0, " +
-					"(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), " + codParc + ", " + // Substituído codparc por codParc
-					codTipTit + ", " + vlrDesdob + ", 0, 0, CODBCO, CODCTABCOINT, DTNEG, SYSDATE, SYSDATE, TO_DATE('" +
-					dtCredito + "', 'YYYY-MM-DD'), SYSDATE, DTVENCINIC, 1, 1, null, 'I', 'N', 'N', 'N', 'N', 'N', 'N', 'N', " +
-					"'S', 'S', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, AD_IDALUNO, " +
-					nufinOrig + ", 'S', 'S', '" + baixaId + "', AD_AUTORIZACAO_CART, AD_NSU_CART FROM TGFFIN WHERE NUFIN = " + nufinOrig + ")";
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			se.printStackTrace();
-			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() +
-					"' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() +
-					"' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
-		} finally {
-			try {
-				if (pstmt != null) {
-					pstmt.close();
-				}
-
-				if (jdbc != null) {
-					jdbc.closeSession();
-				}
-			} catch (Exception se) {
-				se.printStackTrace();
-			}
-		}
-
-		return nufinNovo;
-	}
-
-
-	public BigDecimal getMaxNumFin() throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		ResultSet rs = null;
-		BigDecimal id = BigDecimal.ZERO;
-
-		try {
-			this.updateNumFin();
-			jdbc.openSession();
-			String sqlNota = "SELECT MAX(ULTCOD) AS ULTCOD FROM TGFNUM WHERE ARQUIVO = 'TGFFIN'";
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			rs = pstmt.executeQuery();
-			if (rs.next()) {
-				id = rs.getBigDecimal("ULTCOD");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			throw e;
-		} finally {
-			if (rs != null) {
-				rs.close();
-			}
-
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			jdbc.closeSession();
-		}
-
-		return id;
-	}
-
-	public void updateNumFin() throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			jdbc.openSession();
-			String sqlUpdate = "UPDATE TGFNUM SET ULTCOD = NVL(ULTCOD, 0) + 1  WHERE ARQUIVO = 'TGFFIN'";
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-
-			if (jdbc != null) {
-				jdbc.closeSession();
-			}
-
-		}
-
-	}
 
 	public List<Object[]> retornarInformacoesIdBaixa() throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
