@@ -231,8 +231,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		    } finally {
 		        if(selectsParaInsertLog.size() > 0) {
 		            StringBuilder msgError = new StringBuilder();
-		            
-		            System.out.println("Entrou na lista do finally: doAction " + selectsParaInsertLog.size());
+
 		            LogCatcher.logInfo("Entrou na lista do finally: doAction " + selectsParaInsertLog.size());
 
 		            int qtdInsert = selectsParaInsertLog.size();
@@ -269,10 +268,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		        return "N";
 		    }
 		}
-		
-		/**
-		 * Processa um intervalo de datas agrupando por meses
-		 */
+
 		private void processDateRangeByMonths(String tituloAberto, String tipoEmpresa, MapasDeDadosFinAluno mapas,
 		        String url, String token, BigDecimal codEmp, String dataInicio, String dataFim, String matricula)
 		        throws Exception {
@@ -324,7 +320,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            
 		            insertLogIntegracao(mensagemErro, "ERRO", matricula, codEmp);
 
-		            System.err.println(mensagemErro);
 		            LogCatcher.logError(mensagemErro);
 		            e.printStackTrace();
 		        }
@@ -415,9 +410,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		    }
 		}
 
-		/**
-		 * Processa todas as empresas com integração ativa
-		 */
 		private void processarEmpresas(JdbcWrapper jdbc, MapasDeDadosFinAluno mapas) throws Exception {
 		    String query = "SELECT CODEMP, URL, TOKEN, "
 		                + "CASE WHEN PROFISSIONAL='S' THEN 'P' WHEN TECNICO='S' THEN 'T' ELSE 'N' END AS TIPEMP "
@@ -428,7 +420,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		    
 		    try {
 		    	LogCatcher.logInfo("\nIniciando processamento de empresas com integração ativa pelo Job");
-		        System.out.println("Iniciando processamento de empresas com integração ativa pelo Job");
 		        
 		        pstmt = jdbc.getPreparedStatement(query);
 		        rs = pstmt.executeQuery();
@@ -514,7 +505,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            } catch (SQLException sqlEx) {
 		                String msgErro = "Erro SQL ao processar empresa " + codEmp + ": " 
 		                               + sqlEx.getMessage() + " (Código: " + sqlEx.getErrorCode() + ")";
-		                System.err.println(msgErro);
 		                LogCatcher.logError(msgErro);
 
 		                ErroTitulo erro = new ErroTitulo(
@@ -542,7 +532,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            } catch (Exception ex) {
 		                String msgErro = "Erro ao processar empresa " + codEmp + ": " + ex.getMessage()
 		                               + " - Tipo: " + ex.getClass().getName();
-		                System.err.println(msgErro);
 		                LogCatcher.logError(msgErro);
 		                StackTraceElement[] stackTrace = ex.getStackTrace();
 		                if (stackTrace.length > 0) {
@@ -570,30 +559,25 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		                
 		                insertLogIntegracao(msgErro, "ERRO", "", codEmp);
 
-		                System.err.println("Stack trace do erro:");
 		                ex.printStackTrace();
 		                empresasComErro++;
 		                LogCatcher.logInfo("Stack trace do erro:");
 		                LogCatcher.logError(msgErro);
 		            }
 		        }
-		        
-		        System.out.println("Processamento finalizado. Empresas processadas pelo Job: " + empresasProcessadas 
-		                        + " / Empresas com erro pelo Job: " + empresasComErro);
+
 		        LogCatcher.logInfo("\nProcessamento finalizado. Empresas processadas pelo Job: " + empresasProcessadas 
                         + " / Empresas com erro pelo Job: " + empresasComErro);
 		        
 		    } catch (SQLException dbEx) {
 		        String msgErro = "Erro ao consultar empresas para integração: " + dbEx.getMessage() 
 		                      + " (Código: " + dbEx.getErrorCode() + ")";
-		        System.err.println(msgErro);
 		        LogCatcher.logError(msgErro);
 		        insertLogIntegracao(msgErro, "ERRO_SQL", "", null);
 		        throw dbEx;
 		        
 		    } catch (Exception ex) {
 		        String msgErro = "Erro geral no processamento de empresas pelo Job: " + ex.getMessage();
-		        System.err.println(msgErro);
 		        LogCatcher.logError(msgErro);
 		        insertLogIntegracao(msgErro, "ERRO_FATAL", "", null);
 		        throw ex;
@@ -605,7 +589,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            }
 		        } catch (SQLException closeEx) {
 		        	LogCatcher.logError("Erro ao fechar ResultSet pelo Job: " + closeEx.getMessage());
-		            System.err.println("Erro ao fechar ResultSet pelo Job: " + closeEx.getMessage());
 		        }
 		        
 		        try {
@@ -614,7 +597,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		            }
 		        } catch (SQLException closeEx) {
 		        	LogCatcher.logError("Erro ao fechar PreparedStatement pelo Job: " + closeEx.getMessage());
-		            System.err.println("Erro ao fechar PreparedStatement pelo Job: " + closeEx.getMessage());
 		        }
 		    }
 		}
@@ -636,7 +618,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		    try {
 		        insertLogIntegracao(erro.formatarParaLog(), tipoErro, "", codEmp);
 		    } catch (Exception e) {
-		        System.err.println("Erro ao registrar erro de título no log: " + e.getMessage());
 		        LogCatcher.logError("Erro ao registrar erro de título no log: " + e.getMessage());
 		        e.printStackTrace();
 		    }
@@ -709,9 +690,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	                }
 	                
 	                String urlCompleta = urlBuilder.toString();
-	                System.out.println("URL para financeiro (página " + pagina + 
-	                                   (situacoes.isEmpty() ? "" : ", situação " + situacoes.get(idxSituacao)) + 
-	                                   "): " + urlCompleta);
 	                
 	                LogCatcher.logInfo("URL para financeiro (página " + pagina + 
                             (situacoes.isEmpty() ? "" : ", situação " + situacoes.get(idxSituacao)) + 
@@ -776,7 +754,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        
 	        
 	        LogCatcher.logInfo("Total de registros acumulados: " + todosRegistros.length());
-	        System.out.println("Total de registros acumulados: " + todosRegistros.length());
+	        
 	        
 	        try {
 	            cadastrarFinanceiro(
@@ -1013,10 +991,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		}
 	}
 
-	
-	/**
-	 *Inicio do bloco cadastrarFinanceiro
-	 */
+
 	public void cadastrarFinanceiro(String tipoEmpresa,
 	        Map<String, BigDecimal> mapaInfNaturezaEmp,
 	        Map<String, BigDecimal> mapaInfCenCusEmp,
@@ -1151,10 +1126,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		selectsParaInsertLog.add(sql.toString());
 	}
 
-
-	/**
-	 * Processa cada registro do JSON retornado pela API
-	 */
 	private void processarRegistrosJson(JsonArray jsonArray,BigDecimal nufin, String tipoEmpresa, BigDecimal codemp,
 	        Map<String, BigDecimal> mapaInfFinanceiro, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
 	        Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfAlunos,
@@ -1171,7 +1142,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	    int total = jsonArray.size();
 
 	    for (JsonElement jsonElement : jsonArray) {
-	        System.out.println("\n----- Processando registro " + (count + 1) + " de " + total + " -----");
+	    	LogCatcher.logInfo("\n----- Processando registro " + (count + 1) + " de " + total + " -----");
 
 	        JsonObject jsonObject = jsonElement.getAsJsonObject();
 
@@ -1184,14 +1155,14 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        String idAluno = jsonObject.get("aluno_id").getAsString();
 	        String situacao_titulo = jsonObject.get("titulo_situacao").getAsString();
 
-	        System.out.println("ID Financeiro: " + idFin);
-	        System.out.println("Valor: " + vlrDesdob);
-	        System.out.println("Data vencimento original: " + dtVenc);
-	        System.out.println("ID Curso: " + (idCurso.isEmpty() ? "vazio" : idCurso));
-	        System.out.println("Taxa ID: " + taxaId);
-	        System.out.println("Data pedido original: " + dtPedidoOrig);
-	        System.out.println("ID Aluno: " + idAluno);
-	        System.out.println("Situação título: " + situacao_titulo);
+	        LogCatcher.logInfo("ID Financeiro: " + idFin);
+	        LogCatcher.logInfo("Valor: " + vlrDesdob);
+	        LogCatcher.logInfo("Data vencimento original: " + dtVenc);
+	        LogCatcher.logInfo("ID Curso: " + (idCurso.isEmpty() ? "vazio" : idCurso));
+	        LogCatcher.logInfo("Taxa ID: " + taxaId);
+	        LogCatcher.logInfo("Data pedido original: " + dtPedidoOrig);
+	        LogCatcher.logInfo("ID Aluno: " + idAluno);
+	        LogCatcher.logInfo("Situação título: " + situacao_titulo);
 
 	        LogCatcher.logInfo(String.format("[Registro %d/%d] ID_FIN: %s | Valor: %s | Vencimento: %s | Aluno: %s | Situação: %s",
 	                count + 1, total, idFin, vlrDesdob.toPlainString(), dtVenc, idAluno, situacao_titulo));
@@ -1201,14 +1172,13 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        Date data = formatoOriginal.parse(dtVenc);
 	        String dataVencFormatada = formatoDesejado.format(data);
 
-	        System.out.println("Data Pedido formatada: " + dtPedido);
-	        System.out.println("Data vencimento formatada: " + dataVencFormatada);
+	        LogCatcher.logInfo("Data Pedido formatada: " + dtPedido);
+	        LogCatcher.logInfo("Data vencimento formatada: " + dataVencFormatada);
 
 	        BigDecimal codparc = Optional.ofNullable(mapaInfAlunos.get(idAluno + "###" + codemp))
 	                .orElse(BigDecimal.ZERO);
 
 	        String codParcLog = (codparc.compareTo(BigDecimal.ZERO) == 0) ? " (NÃO ENCONTRADO)" : "";
-	        System.out.println("Código parceiro: " + codparc + codParcLog);
 	        LogCatcher.logInfo("Código parceiro para aluno " + idAluno + ": " + codparc + codParcLog);
 
 	        if (situacao_titulo.equalsIgnoreCase("X")) {
@@ -1220,7 +1190,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        }
 
 	        count++;
-	        System.out.println("\n----- Registro " + count + " processado -----");
+	        LogCatcher.logInfo("\n----- Registro " + count + " processado -----");
 	    }
 	}
 	
@@ -1293,19 +1263,14 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 
-
-	/**
-	 * Processa um título que está cancelado (situacao_titulo = 'X')
-	 */
 	private void processarTituloCancelado(String idFin,BigDecimal nufin, BigDecimal codemp,
 	        Map<String, BigDecimal> mapaInfFinanceiro, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
 	        Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco) throws Exception {
 
-	    System.out.println("Título cancelado - processando exclusão");
+		LogCatcher.logInfo("Título cancelado - processando exclusão");
 	    LogCatcher.logInfo("Título cancelado detectado para ID_FIN: " + idFin + ", empresa: " + codemp);
 
 	    String chaveFinanceiro = codemp + "###" + idFin;
-	    System.out.println("Chave para busca financeiro: " + chaveFinanceiro);
 	    LogCatcher.logInfo("Chave composta para busca de financeiro: " + chaveFinanceiro);
 
 	    BigDecimal validarNufin = Optional.ofNullable(mapaInfFinanceiro.get(chaveFinanceiro))
@@ -1313,65 +1278,34 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 	    String nufinMsg = "NUFIN para exclusão: " + validarNufin +
 	            (validarNufin.compareTo(BigDecimal.ZERO) == 0 ? " (NÃO ENCONTRADO)" : "");
-	    System.out.println(nufinMsg);
 	    LogCatcher.logInfo(nufinMsg);
 
 	    if (validarNufin.compareTo(BigDecimal.ZERO) != 0) {
-	        System.out.println("Financeiro encontrado para exclusão");
 	        LogCatcher.logInfo("Financeiro localizado para exclusão - NUFIN: " + validarNufin);
 
 	        if ("S".equalsIgnoreCase(mapaInfFinanceiroBaixado.get(validarNufin))) {
-	            System.out.println("Financeiro baixado - processando estorno");
 	            LogCatcher.logInfo("Financeiro já baixado - iniciando estorno para NUFIN: " + validarNufin);
 
 	            BigDecimal nubco = mapaInfFinanceiroBanco.get(validarNufin);
-	            System.out.println("NUBCO: " + nubco);
 	            LogCatcher.logInfo("Número bancário (NUBCO) associado: " + nubco);
 
 	            estornarTgfFin(nufin, codemp);
 	            LogCatcher.logInfo("[ESTORNO] Estornando NUFIN: " + nufin + ", Empresa: " + codemp);
 	        } else {
-	            System.out.println("Financeiro não baixado - excluindo diretamente");
 	            LogCatcher.logInfo("Financeiro ainda não baixado - excluindo NUFIN diretamente: " + validarNufin);
 	            deleteTgfFin(validarNufin, codemp);
 	        }
 
-	        titulosCancelados.incrementAndGet(); // Título cancelado processado
+	        titulosCancelados.incrementAndGet(); 
 	        LogCatcher.logInfo("Título cancelado contabilizado para NUFIN: " + validarNufin);
 	    } else {
-	        System.out.println("Financeiro não encontrado para exclusão - ignorando");
 	        LogCatcher.logInfo("Chave não encontrada no mapa financeiro - título será ignorado.");
 	    }
 	}
 
-	
-	
-	// Método modificado para registrar erros de títulos durante o processamento
-	public void processarTitulo(String idTitulo, BigDecimal valor, String dataVencimento, BigDecimal codEmp) {
-	    try {
-	        // Lógica de processamento do título
-	        
-	        // Incrementar contador de títulos processados com sucesso
-	        ContadorEmpresa contador = contadoresPorEmpresa.get(codEmp);
-	        if (contador != null) {
-	            contador.incrementarProcessados();
-	        }
-	        
-	    } catch (Exception e) {
-	        // Registrar erro detalhado do título
-	        registrarErroTitulo(idTitulo, valor, dataVencimento, "ERRO_PROCESSAMENTO", e.getMessage(), codEmp);
-	        
-	        System.err.println("Erro ao processar título " + idTitulo + ": " + e.getMessage());
-	        LogCatcher.logError("Erro ao processar título " + idTitulo + ": " + e.getMessage());
-	        e.printStackTrace();
-	    }
-	}
+
 	
 
-
-	/**
-	 * Processa um título ativo (não cancelado)
-	 */
 	private void processarTituloAtivo(String idFin, BigDecimal vlrDesdob, String dtPedido,
 	        String dataVencFormatada, String idAluno, String taxaId, String tipoEmpresa,
 	        BigDecimal codemp, BigDecimal codparc, Map<String, BigDecimal> mapaInfFinanceiro,
@@ -1380,17 +1314,14 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfNatureza,
 	        List<String> selectsParaInsert, List<String> selectsParaInsertLog) {
 
-	    System.out.println("Processando título não cancelado");
 	    LogCatcher.logInfo("\nIniciando processamento de título ativo: " + idFin + " para empresa " + codemp);
 
 	    if (vlrDesdob.compareTo(new BigDecimal("5")) <= 0) {
-	        System.out.println("AVISO: Valor <= 5 - ignorando registro");
 	        LogCatcher.logInfo("Título ignorado por valor <= 5: " + vlrDesdob);
 	        return;
 	    }
 
 	    if (codparc.compareTo(BigDecimal.ZERO) == 0) {
-	        System.out.println("AVISO: Aluno com Id: " + idAluno + " não encontrado");
 	        LogCatcher.logInfo("Aluno com ID " + idAluno + " não localizado - título ignorado");
 	        return;
 	    }
@@ -1398,84 +1329,77 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	    try {
 	        if (!validarDataLimite(dtPedido)) {
 	            String aviso = "Data pedido inferior à data limite: " + dtPedido;
-	            System.out.println("ATENÇÃO: " + aviso);
 	            LogCatcher.logInfo(aviso);
 	            adicionarLogErro(selectsParaInsertLog, aviso, "Aviso", codemp, "");
 	            return;
 	        }
 	    } catch (Exception e) {
-	        System.out.println("Erro ao validar data limite: " + e.getMessage());
 	        LogCatcher.logError("Erro ao validar data limite para título " + idFin + ": " + e.getMessage());
 	        e.printStackTrace();
 	    }
 
 	    String chaveCenCus = taxaId + "###" + tipoEmpresa;
-	    System.out.println("Chave para busca Centro Custo: " + chaveCenCus);
 	    LogCatcher.logInfo("Buscando Centro de Custo com chave: " + chaveCenCus);
 
 	    BigDecimal codCenCus = Optional.ofNullable(mapaInfCenCus.get(chaveCenCus))
 	        .orElseGet(() -> {
-	            System.out.println("Centro Custo não encontrado pela taxa, buscando pelo aluno");
 	            LogCatcher.logInfo("Centro de Custo não encontrado pela taxa. Tentando pelo aluno: " + idAluno);
 	            return Optional.ofNullable(mapaInfCenCusAluno.get(idAluno))
 	                .orElse(BigDecimal.ZERO);
 	        });
 
-	    System.out.println("CodCenCus: " + codCenCus + 
+	    LogCatcher.logInfo("CodCenCus: " + codCenCus + 
 	        (codCenCus.compareTo(BigDecimal.ZERO) == 0 ? " (NÃO ENCONTRADO)" : ""));
-	    LogCatcher.logInfo("Centro de Custo resolvido: " + codCenCus);
 
 	    if (codCenCus.compareTo(BigDecimal.ZERO) == 0) {
-	        System.out.println("ATENÇÃO: Centro de Custo inválido - adicionando log");
+	    	LogCatcher.logInfo("ATENÇÃO: Centro de Custo inválido - adicionando log");
 	        LogCatcher.logInfo("Centro de Custo inválido para taxa ID " + taxaId + " - título ignorado");
-	        adicionarLogErro(selectsParaInsertLog, "Sem \"de para\" para a Taxa ID: " + taxaId, "Aviso", codemp, "");
+	        String mensagemErro = "Sem \"de para\" para a Taxa ID: " + taxaId;
+	        String status = "Aviso";
+	        try {
+				insertLogIntegracao(mensagemErro, status, "", codemp);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 	        selectsParaInsert.add("SELECT " + codemp + ", SYSDATE, <#NUMUNICO#>, '" + "' FROM DUAL");
 	        return;
 	    }
 
 	    String chaveFinanceiro = codemp + "###" + idFin;
-	    System.out.println("Chave para busca Financeiro: " + chaveFinanceiro);
 	    LogCatcher.logInfo("Buscando financeiro com chave: " + chaveFinanceiro);
 
 	    BigDecimal validarNufin = Optional.ofNullable(mapaInfFinanceiro.get(chaveFinanceiro))
 	        .orElse(BigDecimal.ZERO);
 
-	    System.out.println("NUFIN: " + validarNufin + 
+	    LogCatcher.logInfo("NUFIN: " + validarNufin + 
 	        (validarNufin.compareTo(BigDecimal.ZERO) == 0 
 	            ? " (FINANCEIRO NÃO ENCONTRADO - PRONTO PARA CADASTRO)" 
 	            : " (FINANCEIRO JÁ EXISTENTE)"));
-	    LogCatcher.logInfo("Resultado da busca de NUFIN: " + validarNufin);
 
 	    if (validarNufin.compareTo(BigDecimal.ZERO) != 0) {
-	        System.out.println("AVISO: Financeiro " + idFin + " já cadastrado para o parceiro: " + codparc);
-	        LogCatcher.logInfo("Financeiro " + idFin + " já existe - cadastro ignorado");
+	    	LogCatcher.logInfo("AVISO: Financeiro " + idFin + " já cadastrado para o parceiro: " + codparc);
 	        return;
 	    }
 
 	    BigDecimal codConta = mapaInfConta.get(codemp.toString());
-	    System.out.println("Código Conta: " + codConta);
 	    LogCatcher.logInfo("Conta bancária resolvida: " + codConta);
 
 	    BigDecimal codBanco = mapaInfBanco.get(codemp.toString());
-	    System.out.println("Código Banco: " + codBanco);
 	    LogCatcher.logInfo("Banco resolvido: " + codBanco);
 
 	    String recDesp = mapaInfRecDesp.get(taxaId);
-	    System.out.println("Rec/Desp: " + recDesp);
 	    LogCatcher.logInfo("RecDesp resolvido: " + recDesp);
 
 	    String chaveNatureza = taxaId + "###" + tipoEmpresa;
-	    System.out.println("Chave para busca Natureza: " + chaveNatureza);
 	    LogCatcher.logInfo("Buscando natureza com chave: " + chaveNatureza);
 
 	    BigDecimal natureza = Optional.ofNullable(mapaInfNatureza.get(chaveNatureza))
 	        .orElse(BigDecimal.ZERO);
-	    System.out.println("Natureza: " + natureza + 
+	    LogCatcher.logInfo("Natureza: " + natureza + 
 	        (natureza.compareTo(BigDecimal.ZERO) == 0 ? " (NÃO ENCONTRADA)" : ""));
-	    LogCatcher.logInfo("Natureza resolvida: " + natureza);
 
 	    if (recDesp == null || recDesp.isEmpty() || natureza.compareTo(BigDecimal.ZERO) == 0) {
-	        System.out.println("ATENÇÃO: RecDesp ou Natureza inválidos - adicionando log");
+	    	LogCatcher.logInfo("ATENÇÃO: RecDesp ou Natureza inválidos - adicionando log");
 
 	        String mensagemErro = "Sem \"de para\" para a Taxa ID: " + taxaId;
 	        String status = "Aviso";
@@ -1505,15 +1429,12 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        contador.incrementarProcessados();
 	    }
 
-	    System.out.println("Financeiro cadastrado com sucesso no array de inserts");
 	    LogCatcher.logInfo("\nTítulo " + idFin + " cadastrado com sucesso no array de inserts.");
 	}
 
 	
 
-	/**
-	 * Cria o SQL para inserção do financeiro 
-	 */
+
 	private String criarSqlInsertFinanceiro(BigDecimal codCenCus, BigDecimal natureza, BigDecimal codemp,
 	        BigDecimal codparc, BigDecimal vlrDesdob, BigDecimal codBanco, BigDecimal codConta,
 	        String dtPedido, String dataVencFormatada, String idFin, String idAluno) {
@@ -1553,20 +1474,15 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	            + "' FROM DUAL ";
 	}
 
-	/**
-	 * Executa as inserções de financeiro no banco
-	 */
+
 	private void executarInsercoesFinanceiro(EnviromentUtils util, List<String> selectsParaInsert, int qtdInsert, 
 	        BigDecimal codemp) throws Exception {
 
-	    System.out.println("Iniciando processamento de inserts");
 	    LogCatcher.logInfo("\nIniciando processamento de inserts para empresa: " + codemp);
 
 	    BigDecimal nuFinInicial = util.getMaxNumFin(false);
-	    System.out.println("NUFIN inicial obtido: " + nuFinInicial);
 	    LogCatcher.logInfo("NUFIN inicial obtido: " + nuFinInicial);
 
-	    System.out.println("Atualizando NUFIN com incremento de: " + qtdInsert);
 	    LogCatcher.logInfo("Atualizando sequência NUFIN com incremento de: " + qtdInsert);
 	    util.updateNumFinByQtd(qtdInsert);
 
@@ -1577,7 +1493,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        int nuFin = nuFinInicial.intValue() + i;
 	        sql = sql.replace("<#NUFIN#>", String.valueOf(nuFin));
 	        sqlInsertFin.append(sql);
-	        System.out.println("SQL #" + i + " - NUFIN: " + nuFin);
 	        LogCatcher.logInfo("Preparado SQL #" + i + " com NUFIN: " + nuFin);
 
 	        if (i < qtdInsert) {
@@ -1586,20 +1501,14 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        i++;
 	    }
 
-	    System.out.println("SQL de insert pronto para execução");
 	    LogCatcher.logInfo("SQL de insert TGFFIN pronto para execução com " + qtdInsert + " linhas.");
 
-	    System.out.println("Executando insertFinByList");
 	    LogCatcher.logInfo("Executando insertFinByList para empresa " + codemp);
 	    insertFinByList(sqlInsertFin, codemp);
-	    System.out.println("InsertFinByList concluído com sucesso");
 	    LogCatcher.logInfo("\nInsertFinByList concluído com sucesso para empresa " + codemp);
 	}
 
 
-	/**
-	 * Adiciona um log de erro ou aviso para ser inserido posteriormente
-	 */
 	private void adicionarLogErro(List<String> selectsParaInsertLog, String mensagem, 
 	        String tipo, BigDecimal codemp, String idExterno) {
 	    
@@ -1675,7 +1584,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	            reader.close();
 	            https.disconnect();
 
-	            System.out.println("Output from Server .... \n" + status);
 	            LogCatcher.logInfo("Output from Server .... \n" + status);
 
 	            return new String[] { Integer.toString(status), responseContent.toString() };
@@ -1794,7 +1702,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 		BigDecimal nufin = getMaxNumFin();
 
-		System.out.println("Insert financeiro: " + nufin);
+		LogCatcher.logInfo("Insert financeiro: " + nufin);
 
 		try {
 
@@ -2017,161 +1925,10 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		return id;
 	}
 
-	
-	public BigDecimal getCodParc(String idAluno) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-	    
-	    try {
-	        JapeWrapper alunoDAO = JapeFactory.dao("AD_ALUNOS");
-	        DynamicVO alunoVO = alunoDAO.findOne("ID_EXTERNO = ?", new Object[]{idAluno});
-	        
-	        if (alunoVO != null) {
-	            id = alunoVO.asBigDecimal("CODPARC");
-	            // Se o valor for nulo, mantém o ZERO definido inicialmente
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	    	LogCatcher.logError("Erro ao buscar código do aluno " + idAluno + ": " + e.getMessage());
-	    	 insertLogIntegracao("Erro ao buscar código do aluno " + idAluno + ": " + e.getMessage(), "ERRO", idAluno, null);
-	         throw e;
-	    }
-	    
-	    return id;
-	}
-
-	public BigDecimal getCodBanco(BigDecimal codEmp) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-
-	    try {
-	        JapeWrapper bancoDAO = JapeFactory.dao("AD_INFOBANKBAIXA");
-	        DynamicVO bancoVO = bancoDAO.findOne("CODEMP = ? AND IDEXTERNO IS NULL", new Object[]{codEmp});
-
-	        if (bancoVO != null) {
-	            id = bancoVO.asBigDecimal("CODBCO");
-	            // Se o valor for nulo, mantém o ZERO definido inicialmente
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;
-	    }
-
-	    return id;
-	}
 
 
-	public BigDecimal getNatureza(String idExterno) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-
-	    try {
-	        JapeWrapper naturezaDAO = JapeFactory.dao("AD_NATACAD");
-	        DynamicVO naturezaVO = naturezaDAO.findOne("IDEXTERNO = ?", new Object[]{idExterno});
-
-	        if (naturezaVO != null) {
-	            id = naturezaVO.asBigDecimal("CODNAT");
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;
-	    }
-
-	    // Se não encontrou ou era zero, ajusta para 10101002
-	    if (id.compareTo(BigDecimal.ZERO) == 0) {
-	        id = BigDecimal.valueOf(10101002);
-	    }
-
-	    return id;
-	}
 
 
-	public BigDecimal getCodConta(BigDecimal codEmp) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-
-	    try {
-	        JapeWrapper contaDAO = JapeFactory.dao("AD_INFOBANKBAIXA");
-	        DynamicVO contaVO = contaDAO.findOne("CODEMP = ? AND IDEXTERNO IS NULL", new Object[]{codEmp});
-
-	        if (contaVO != null) {
-	            id = contaVO.asBigDecimal("CODCTABCOINT");
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;
-	    }
-
-	    return id;
-	}
-
-
-	public BigDecimal getCodCenCus(String idCurso) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-
-	    try {
-	        JapeWrapper cencusDAO = JapeFactory.dao("TSICUS");
-	        DynamicVO cencusVO = cencusDAO.findOne("AD_IDEXTERNO = ?", new Object[]{idCurso});
-
-	        if (cencusVO != null) {
-	            id = cencusVO.asBigDecimal("CODCENCUS");
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;
-	    }
-
-	    return id;
-	}
-
-	public BigDecimal getCodCenCusPeloCusto(String idTaxa) throws Exception {
-	    BigDecimal id = BigDecimal.ZERO;
-
-	    try {
-	        JapeWrapper natacadDAO = JapeFactory.dao("AD_NATACAD");
-	        DynamicVO natacadVO = natacadDAO.findOne("IDEXTERNO = ?", new Object[]{idTaxa});
-
-	        if (natacadVO != null) {
-	            id = natacadVO.asBigDecimal("CODCENCUS");
-	            if (id == null) {
-	                id = BigDecimal.ZERO;
-	            }
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;
-	    }
-
-	    return id;
-	}
-
-
-	public boolean validarFin(String idFin, BigDecimal codemp) throws Exception {
-	    try {
-	        JapeWrapper finDAO = JapeFactory.dao("TGFFIN");
-	        DynamicVO finVO = finDAO.findOne("AD_IDEXTERNO = ? AND CODEMP = ?", new Object[]{idFin, codemp});
-
-	        // Se encontrou, já existe — retorna false.
-	        return finVO == null;
-	    } catch (Exception e) {
-	        // Se der erro de "registro não encontrado", consideramos como válido.
-	        if (e.getMessage() != null && e.getMessage().contains("Nenhum registro encontrado")) {
-	            return true;
-	        }
-	        e.printStackTrace();
-	        throw e;
-	    }
-	}
 
 
 	public boolean validarDataLimite(String data) throws Exception {
@@ -2222,110 +1979,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 		}
 	}
 
-	public BigDecimal getAluno(BigDecimal codparc) throws Exception {
-	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-	    JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-	    PreparedStatement pstmt = null;
-	    ResultSet rs = null;
-
-	    try {
-	        jdbc.openSession();
-
-	        String sql = "SELECT ID_EXTERNO FROM AD_ALUNOS WHERE CODPARC = ?";
-
-	        pstmt = jdbc.getPreparedStatement(sql);
-	        pstmt.setBigDecimal(1, codparc);
-
-	        rs = pstmt.executeQuery();
-
-	        if (rs.next()) {
-	            return rs.getBigDecimal("ID_EXTERNO"); // já retorna direto
-	        } else {
-	            return BigDecimal.ZERO;
-	        }
-
-	    } catch (SQLException e) {
-	        e.printStackTrace();
-	        throw e;
-	    } finally {
-	        if (rs != null) {
-	            rs.close();
-	        }
-	        if (pstmt != null) {
-	            pstmt.close();
-	        }
-	        jdbc.closeSession();
-	    }
-	}
-
-
-	public boolean getRecDesp(String idExterno) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		ResultSet rs = null;
-
-		int id = 0;
-
-		try {
-
-			jdbc.openSession();
-
-			String sqlNota = "SELECT SUBSTR(CODNAT, 0, 1) NAT "
-					+ "FROM AD_NATACAD where idexterno = "
-					+ idExterno
-					+ " "
-					+ "union SELECT '0' FROM DUAL "
-					+ "WHERE NOT EXISTS (SELECT SUBSTR(CODNAT, 0, 1) NAT FROM AD_NATACAD where idexterno = "
-					+ idExterno + ")";
-
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-
-			rs = pstmt.executeQuery();
-
-			if (rs.next()) {
-
-				id = Integer.parseInt(rs.getString("NAT"));
-
-			}
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			throw e;
-		} finally {
-			if (rs != null) {
-				rs.close();
-			}
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			jdbc.closeSession();
-		}
-
-		if (id > 1) {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	public void updateNumFin() throws Exception {
-	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-	    JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-
-	    try (PreparedStatement pstmt = jdbc.getPreparedStatement(
-	            "UPDATE TGFNUM SET ULTCOD = NVL(ULTCOD, 0) + 1 WHERE ARQUIVO = 'TGFFIN'")) {
-
-	        jdbc.openSession();
-	        pstmt.executeUpdate();
-
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        throw e;  // Não engole a exceção, propaga para quem chamou.
-	    } finally {
-	        jdbc.closeSession();
-	    }
-	}
 
 
 	public void updateNumFinByQtd(int qtdAdd) throws Exception {
@@ -2357,63 +2010,8 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 	}
 
-	public void updateFlagAlunoIntegrado(String idAluno) throws Exception {
 
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
 
-		try {
-
-			jdbc.openSession();
-
-			String sqlUpdate = "UPDATE AD_ALUNOS SET INTEGRADO = 'S' WHERE ID_EXTERNO = '"
-					+ idAluno + "'";
-
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-
-		} catch (Exception se) {
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			if (jdbc != null) {
-				jdbc.closeSession();
-			}
-		}
-
-	}
-
-	public void updateResetarAlunos() throws Exception {
-
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		try {
-			System.out.println("Entrou no UPDATE da flag dos alunos");
-			LogCatcher.logInfo("Entrou no UPDATE da flag dos alunos");
-			jdbc.openSession();
-
-			String sqlUpdate = "UPDATE AD_ALUNOS SET INTEGRADO = 'N'";
-
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-			pstmt.executeUpdate();
-
-		} catch (Exception se) {
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			if (jdbc != null) {
-				jdbc.closeSession();
-			}
-		}
-
-	}
 
 
 	public void deleteTgfFin(BigDecimal nufin, BigDecimal codemp) throws Exception {
@@ -2428,7 +2026,7 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        pstmt = jdbc.getPreparedStatement(sqlNota);
 
 	        int resultado = pstmt.executeUpdate();
-	        System.out.println("Passou do update");
+	        LogCatcher.logInfo("Passou do update");
 	        LogCatcher.logInfo("deleteTgfFin: Título " + nufin + " excluído com sucesso. Empresa: " + codemp);
 
 	        if (resultado == 0) {
@@ -2455,7 +2053,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 	        String recDesp, BigDecimal natureza, String taxaId) throws Exception {
 
 	    if (recDesp == null || recDesp.isEmpty() || natureza == null || natureza.compareTo(BigDecimal.ZERO) == 0) {
-	        System.out.println("ATENÇÃO: RecDesp ou Natureza inválidos - adicionando log");
 	        LogCatcher.logInfo("RecDesp ou Natureza inválidos para Taxa ID: " + taxaId);
 
 	        String erroTaxa = "Sem \"de para\" para a Taxa ID: " + taxaId;
@@ -2506,7 +2103,6 @@ public class AcaoGetTitulosCarga implements AcaoRotinaJava, ScheduledAction {
 
 	    } catch (Exception se) {
 	        String erro = "Erro ao inserir log de integração: " + se.getMessage();
-	        System.err.println(erro);
 	        LogCatcher.logError(erro);
 	        se.printStackTrace();
 	    } finally {

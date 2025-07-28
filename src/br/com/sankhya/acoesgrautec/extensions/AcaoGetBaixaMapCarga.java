@@ -5,9 +5,7 @@ import br.com.sankhya.extensions.actionbutton.AcaoRotinaJava;
 import br.com.sankhya.extensions.actionbutton.ContextoAcao;
 import br.com.sankhya.extensions.actionbutton.Registro;
 import br.com.sankhya.jape.EntityFacade;
-import br.com.sankhya.jape.core.JapeSession;
 import br.com.sankhya.jape.dao.JdbcWrapper;
-import br.com.sankhya.jape.util.JapeSessionContext;
 import br.com.sankhya.jape.vo.DynamicVO;
 import br.com.sankhya.jape.wrapper.JapeFactory;
 import br.com.sankhya.jape.wrapper.JapeWrapper;
@@ -28,10 +26,10 @@ import java.math.BigDecimal;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -41,44 +39,28 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
-
-import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper;
-import br.com.sankhya.modelcore.financeiro.util.DadosBaixa;
-import br.com.sankhya.modelcore.dwfdata.vo.tgf.FinanceiroVO;
-import br.com.sankhya.modelcore.financeiro.util.TipoJurosMulta;
 
 import org.activiti.engine.impl.util.json.JSONArray;
 import org.cuckoo.core.ScheduledAction;
 import org.cuckoo.core.ScheduledActionContext;
 
-
-
 public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	private List<String> selectsParaInsert = new ArrayList();
 	private EnviromentUtils util = new EnviromentUtils();
-	private String resumoExecucao;
-	private int titulosBaixadosComSucesso;
-    private int titulosJaBaixadosIgnorados;
-    private int titulosComOutrosErros;
-	
 	static {
 		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	}
 
 	public void doAction(ContextoAcao contexto) throws Exception {
 
-		this.titulosBaixadosComSucesso = 0;
-	    this.titulosJaBaixadosIgnorados = 0;
-	    this.titulosComOutrosErros = 0;
-	    this.resumoExecucao = "";
 
 		Registro[] linhas = contexto.getLinhas();
 		Registro registro = linhas[0];
 		String url = (String) registro.getCampo("URL");
 		String token = (String) registro.getCampo("TOKEN");
 		BigDecimal codEmp = (BigDecimal) registro.getCampo("CODEMP");
-		
 		String dataInicio = contexto.getParam("DTINICIO").toString().substring(0, 10);
 		String dataFim = contexto.getParam("DTFIM").toString().substring(0, 10);
 		String matricula = (String) contexto.getParam("Matricula");
@@ -281,16 +263,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					mapaInfFinanceiroBanco, mapaInfTipoTituloCodparcCartao, dataInicio, dataFim, matricula,
 					mapaInfIdBaixaParcelas,mapaBaixaIdParaNufin);
 
-
-			LogCatcher.logInfo("--- RESUMO FINAL DO PROCESSAMENTO DA EMPRESA " + codEmp + " ---");
-			LogCatcher.logInfo(this.resumoExecucao);
-
-			if (this.resumoExecucao != null && !this.resumoExecucao.isEmpty()) {
-				contexto.setMensagemRetorno(this.resumoExecucao);
-			} else {
-				contexto.setMensagemRetorno("Processo concluído!");
-			}
-			
+			contexto.setMensagemRetorno("Periodo Processado!");
 		} catch (Exception e) {
 			e.printStackTrace();
 			LogCatcher.logInfo("Erro durante o processamento doAction: " + e.getMessage());
@@ -326,46 +299,22 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 	public void onTime(ScheduledActionContext arg0) {
-		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
+		System.out.println("/*************** Inicio - JobGetBaixaMap *****************/ ");
+		LogCatcher.logInfo("\n/*************** Inicio - onTime GetBaixaMap *****************/ ");
 		long tempoAnterior = System.currentTimeMillis();
 		long tempoInicio = System.currentTimeMillis();
-		
-		
-		JapeSession.SessionHandle hnd = null;
-		
-		
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
 		PreparedStatement pstmt = null;
 		ResultSet rs = null;
 		BigDecimal codEmp = BigDecimal.ZERO;
+		BigDecimal idCarga = BigDecimal.ZERO;
 		String url = "";
 		String token = "";
+		String matricula = "";
 		int count = 0;
-		LogCatcher.logInfo("\n/*************** Inicio - onTime GetBaixaMap *****************/ ");
 
 		try {
-			hnd = JapeSession.open();
-
-	        JapeWrapper usuDAO = JapeFactory.dao("Usuario");
-	        DynamicVO usuVO = usuDAO.findOne("CODUSU = ?", BigDecimal.ZERO);
-	        
-	        if (usuVO == null) {
-	            throw new Exception("Usuário SUP (código 0) não foi encontrado no sistema.");
-	        }
-	        
-	        String nomeUsu = usuVO.asString("NOMEUSU");
-	        BigDecimal codGrupo = usuVO.asBigDecimal("CODGRUPO");
-	        BigDecimal codUsu = usuVO.asBigDecimal("CODUSU");
-
-	        AuthenticationInfo authInfo = new AuthenticationInfo(nomeUsu, codUsu, codGrupo, 0);
-
-	        authInfo.makeCurrent();
-	        JapeSessionContext.putProperty("usuario_logado", authInfo.getUserID());
-
-	        LogCatcher.logInfo("Sessão autenticada com sucesso para " + nomeUsu + " via new AuthenticationInfo() e makeCurrent().");
-	        
-	        
 			LogCatcher.logInfo("Carregando informações de Banco e Conta do Job...");
 			List<Object[]> listInfBancoConta = this.retornarInformacoesBancoConta();
 			Map<String, BigDecimal> mapaInfBanco = new HashMap();
@@ -534,6 +483,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					mapaInfTipoTituloCodparcCartao.put(codEmpObj + "###" + idExternoObj, codParcCartao);
 				}
 			}
+			//QT PARCELAS
+
 
 			LogCatcher.logInfo("Carregando informações do listInfMenorDataMovBancariaPorConta do Job...");
 			List<Object[]> listInfMenorDataMovBancariaPorConta = this.retornarInformacoesMenorDataMovBancariaPorConta();
@@ -548,6 +499,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			}
 
 			jdbc.openSession();
+			// Modificado para incluir a verificação da flag INTEGRACAO
 			String query = "SELECT CODEMP, URL, TOKEN, INTEGRACAO FROM AD_LINKSINTEGRACAO";
 			pstmt = jdbc.getPreparedStatement(query);
 			rs = pstmt.executeQuery();
@@ -557,15 +509,17 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 						 .next(); tempoAnterior = this.printLogDebug(tempoAnterior,
 					"onTime - updateCarga da empresa(" + codEmp + ")")) {
 				++count;
+				System.out.println("Contagem: " + count);
 				LogCatcher.logInfo("Contagem: " + count);
 				codEmp = rs.getBigDecimal("CODEMP");
 				url = rs.getString("URL");
 				token = rs.getString("TOKEN");
 				String statusIntegracao = rs.getString("INTEGRACAO");
 
+				// Verifica se a integração está ativa para esta empresa
 				if (!"S".equals(statusIntegracao)) {
 					System.out.println("Integração desativada para a empresa " + codEmp + " - pulando processamento");
-					continue;
+					continue; // Pula para a próxima iteração do loop
 				}
 
 				this.iterarEndpoint(url, token, codEmp, mapaInfIdBaixaOrig, mapaInfIdBaixa, mapaInfTipoTituloTaxa,
@@ -575,8 +529,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 				tempoAnterior = this.printLogDebug(tempoAnterior, "onTime - efetuarBaixa da empresa(" + codEmp + ")");
 			}
 
-			LogCatcher.logInfo("Chegou ao final da baixa");
-			LogCatcher.logInfo("\n/*************** Fim - JobGetBaixaMap *****************/");
+			System.out.println("Chegou ao final da baixa");
+			System.out.println("\n/*************** Fim - JobGetBaixaMap *****************/");
 			this.printLogDebug(tempoInicio, "Tempo Total: ");
 		} catch (Exception var71) {
 			Exception e = var71;
@@ -591,8 +545,6 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			}
 		} finally {
 			LogCatcher.logInfo("Finalizando execução doOnTime...");
-			  JdbcUtils.closeResultSet(rs);
-		        JdbcUtils.closeStatement(pstmt);
 			if (pstmt != null) {
 				try {
 					pstmt.close();
@@ -612,9 +564,9 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			jdbc.closeSession();
 			if (this.selectsParaInsert.size() > 0) {
 				StringBuilder msgError = new StringBuilder();
-				LogCatcher.logInfo("Entrou na lista do finally: " + this.selectsParaInsert.size());
+				System.out.println("Entrou na lista do finally: " + this.selectsParaInsert.size());
 				int qtdInsert = this.selectsParaInsert.size();
-				LogCatcher.logInfo("Lista de selects: " + this.selectsParaInsert.toString());
+				System.out.println("Lista de selects: " + this.selectsParaInsert.toString());
 				int i = 1;
 
 				for (String sqlInsert : this.selectsParaInsert) {
@@ -629,7 +581,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 					String sql = sqlInsert.replace("<#NUMUNICO#>", String.valueOf(nuFin));
 					msgError.append(sql);
-					LogCatcher.logInfo("Iteração: " + i + " de " + qtdInsert);
+					System.out.println("Iteração: " + i + " de " + qtdInsert);
 					if (i < qtdInsert) {
 						msgError.append(" \nUNION ALL ");
 					}
@@ -637,7 +589,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					++i;
 				}
 
-				LogCatcher.logInfo("Consulta de log: \n" + msgError);
+				System.out.println("Consulta de log: \n" + msgError);
 
 				try {
 					this.insertLogList(msgError.toString(), codEmp);
@@ -646,8 +598,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					e.printStackTrace();
 				}
 
-				AuthenticationInfo.unregistry(); // Essencial para limpar a sessão do processo
-		        JapeSession.close(hnd);
+				StringBuilder var142 = null;
+				this.selectsParaInsert = new ArrayList();
 			}
 
 		}
@@ -666,7 +618,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			throws Exception {
 
 		try {
-			LogCatcher.logInfo("\nIniciando processDateRange Baixa de Alunos- Empresa: " + codemp + ", Período: " + dataInicio + " a "
+			LogCatcher.logInfo("\nIniciando processDateRange - Empresa: " + codemp + ", Período: " + dataInicio + " a "
 					+ dataFim + ", Matrícula: " + matricula);
 
 			LocalDate startDate = LocalDate.parse(dataInicio);
@@ -697,10 +649,12 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 					}
 
 					String urlCompleta = urlBuilder.toString();
+					System.out.println(
+							"URL para baixas (dia: " + currentDate + ", página " + pagina + "): " + urlCompleta);
 					LogCatcher.logInfo(
 							"Chamando API - Data: " + currentDate + ", Página: " + pagina + ", URL: " + urlCompleta);
 
-					String[] response1 = apiGet(urlCompleta, token);
+					String[] response1 = apiGet2(urlCompleta, token);
 					int status = Integer.parseInt(response1[0]);
 
 					if (status == 200) {
@@ -717,21 +671,23 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 						LogCatcher.logInfo("Recebidos " + paginaAtual.length() + " registros na página " + pagina
 								+ " para o dia " + currentDate);
+						System.out.println("Dia " + currentDate + ", página " + pagina + ": " + paginaAtual.length()
+								+ " registros. Total acumulado: " + todosRegistrosDoDia.length());
 					} else {
-						LogCatcher.logInfo("Erro na requisição: Status " + status);
+						System.err.println("Erro na requisição: Status " + status);
 						break;
 					}
 				}
 
 				if (todosRegistrosDoDia.length() > 0) {
-					LogCatcher.logInfo("Processando " + todosRegistrosDoDia.length()
+					System.out.println("Processando " + todosRegistrosDoDia.length()
 							+ " registros de baixas para o dia " + currentDate);
 
 					String[] response = new String[] { "200", todosRegistrosDoDia.toString() };
 
-					LogCatcher.logInfo("Dados sendo enviados para efetuarBaixa:");
-					LogCatcher.logInfo("Tamanho do array: " + todosRegistrosDoDia.length());
-					LogCatcher.logInfo("Conteúdo do todosRegistrosDoDia: " + todosRegistrosDoDia.toString());
+					System.out.println("Dados sendo enviados para efetuarBaixa:");
+					System.out.println("Tamanho do array: " + todosRegistrosDoDia.length());
+					System.out.println("Conteúdo do todosRegistrosDoDia: " + todosRegistrosDoDia.toString());
 					LogCatcher.logInfo("Chamando efetuarBaixa para o dia " + currentDate + " com "
 							+ todosRegistrosDoDia.length() + " registros.");
 
@@ -752,77 +708,71 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 
 	public void iterarEndpoint(String url, String token, BigDecimal codemp, Map<String, BigDecimal> mapaInfIdBaixaOrig,
-			Map<BigDecimal, String> mapaInfIdBaixa, Map<String, BigDecimal> mapaInfTipoTituloTaxa,
-			Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta,
-			Map<String, BigDecimal> mapaInfAlunos, Map<String, BigDecimal> mapaInfFinanceiro,
-			Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta,
-			Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor,
-			Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao,
-			Map<String, BigDecimal> mapaInfIdBaixaParcelas, Map<String, BigDecimal> mapaBaixaIdParaNufin)
-			throws Exception {
+							   Map<BigDecimal, String> mapaInfIdBaixa, Map<String, BigDecimal> mapaInfTipoTituloTaxa,
+							   Map<String, BigDecimal> mapaInfBanco, Map<String, BigDecimal> mapaInfConta,
+							   Map<String, BigDecimal> mapaInfAlunos, Map<String, BigDecimal> mapaInfFinanceiro,
+							   Map<String, BigDecimal> mapaInfTipoTitulo, Map<Long, Date> mapaInfMenorDataMovBancariaPorConta,
+							   Map<BigDecimal, String> mapaInfFinanceiroBaixado, Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor,
+							   Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco, Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao,
+							   Map<String, BigDecimal> mapaInfIdBaixaParcelas,Map<String, BigDecimal> mapaBaixaIdParaNufin) throws Exception {
 		Date dataAtual = new Date();
 		SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
 		String dataFormatada = formato.format(dataAtual);
 
-		LogCatcher.logInfo("=== iterarEndpoint do JOB de Alunos Baixas iniciado ===");
-		LogCatcher.logInfo("codEmp: " + codemp);
-		LogCatcher.logInfo("\nURL base: " + url);
-
 		try {
-			String[] response = this.apiGet(url + "/financeiro" + "/baixas" + "?quantidade=0" + "&dataInicial="
+			String[] response = this.apiGet2(url + "/financeiro" + "/baixas" + "?quantidade=0" + "&dataInicial="
 					+ dataFormatada + " 00:00:00&dataFinal=" + dataFormatada + " 23:59:59", token);
-
 			int status = Integer.parseInt(response[0]);
+			System.out.println("Status teste: " + status);
+			LogCatcher.logInfo("Status teste: " + status);
 			String responseString = response[1];
-
-			//só printa a partir daqui
-			LogCatcher.logInfo("Status da requisição: " + status);
-			LogCatcher.logInfo("Resposta da API (baixas): " + responseString);
-
-			if (status == 200) {
-				LogCatcher.logInfo("Sucesso (200): Requisição bem-sucedida.");
-				this.efetuarBaixa(response, url, token, codemp, mapaInfIdBaixaOrig, mapaInfIdBaixa,
-						mapaInfTipoTituloTaxa, mapaInfBanco, mapaInfConta, mapaInfAlunos, mapaInfFinanceiro,
-						mapaInfTipoTitulo, mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado,
-						mapaInfFinanceiroValor, mapaInfFinanceiroBanco, mapaInfTipoTituloCodparcCartao,
-						mapaInfIdBaixaParcelas, mapaBaixaIdParaNufin);
-			} else if (status >= 400 && status < 500) {
-
-				String erroMsg = "Erro do Cliente (" + status + "): A requisição para buscar baixas falhou. Resposta: "
-						+ responseString;
-				LogCatcher.logError(erroMsg);
-				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro do Cliente (" + status
-						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
-			} else if (status >= 500) {
-
-				String erroMsg = "Erro do Servidor (" + status
-						+ "): Ocorreu um problema no servidor da API ao buscar baixas. Resposta: " + responseString;
-				LogCatcher.logError(erroMsg);
-				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro do Servidor (" + status
-						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
-			} else {
-
-				String erroMsg = "Status inesperado (" + status
-						+ "): A API retornou um código não previsto ao buscar baixas. Resposta: " + responseString;
-				LogCatcher.logError(erroMsg);
-				selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Status inesperado (" + status
-						+ ") ao buscar baixas.', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
-			}
-		} catch (NumberFormatException e) {
-			String erroMsg = "Erro de Formato de Número: Não foi possível converter o status da resposta da API para um número inteiro.";
-			LogCatcher.logError(erroMsg);
+			System.out.println("response string baixas: " + responseString);
+			LogCatcher.logInfo("response string baixas: " + responseString);
+			this.efetuarBaixa(response, url, token, codemp, mapaInfIdBaixaOrig, mapaInfIdBaixa, mapaInfTipoTituloTaxa,
+					mapaInfBanco, mapaInfConta, mapaInfAlunos, mapaInfFinanceiro, mapaInfTipoTitulo,
+					mapaInfMenorDataMovBancariaPorConta, mapaInfFinanceiroBaixado, mapaInfFinanceiroValor,
+					mapaInfFinanceiroBanco, mapaInfTipoTituloCodparcCartao, mapaInfIdBaixaParcelas,mapaBaixaIdParaNufin);
+		} catch (Exception e) {
 			LogCatcher.logError(e);
 			e.printStackTrace();
-		} catch (Exception e) {
-			String erroMsg = "Exceção não tratada ao chamar a API de baixas: " + e.getMessage();
-			LogCatcher.logError(erroMsg);
-			LogCatcher.logError(e); 
-			e.printStackTrace();
-			selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Exceção ao buscar baixas: " + e.getMessage().replace("'", "''")
-					+ "', SYSDATE, 'Erro', " + codemp + ", NULL FROM DUAL");
 		}
+
 	}
 
+	
+	private boolean tituloJaBaixadoNoBanco(String tituloId, BigDecimal codemp) {
+	    boolean baixado = false;
+	    JdbcWrapper jdbc = null;
+	    Connection conn = null;
+	    PreparedStatement stmt = null;
+	    ResultSet rset = null;
+
+	    try {
+	        EntityFacade entity = EntityFacadeFactory.getDWFFacade();
+	        jdbc = entity.getJdbcWrapper();
+	        jdbc.openSession();
+
+	        conn = jdbc.getConnection();
+	        String sql = "SELECT 1 FROM AD_ESTORNOINT WHERE TITULO_ID = ? AND STATUS_ESTORNO = 'E'";
+	        stmt = conn.prepareStatement(sql);
+	        stmt.setBigDecimal(1, new BigDecimal(tituloId));
+	        rset = stmt.executeQuery();
+
+	        if (rset.next()) {
+	            baixado = true;
+	        }
+	    } catch (Exception e) {
+	        LogCatcher.logError("Erro ao verificar se título " + tituloId + " já está baixado e estornado no banco: " + e.getMessage());
+	    } finally {
+	        JdbcUtils.closeResultSet(rset);
+	        JdbcUtils.closeStatement(stmt);
+	        if (jdbc != null) {
+	            jdbc.closeSession();
+	        }
+	    }
+
+	    return baixado;
+	}
 
 
 
@@ -831,18 +781,21 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	//BAIXA DOS CARTOES  ATUALIZADO COM ESTORNO
 	public void efetuarBaixa(String[] response, String url, String token, BigDecimal codemp,
-			Map<String, BigDecimal> mapaInfIdBaixaOrig, Map<BigDecimal, String> mapaInfIdBaixa,
-			Map<String, BigDecimal> mapaInfTipoTituloTaxa, Map<String, BigDecimal> mapaInfBanco,
-			Map<String, BigDecimal> mapaInfConta, Map<String, BigDecimal> mapaInfAlunos,
-			Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfTipoTitulo,
-			Map<Long, Date> mapaInfMenorDataMovBancariaPorConta, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
-			Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco,
-			Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao, Map<String, BigDecimal> mapaInfIdBaixaParcelas,
-			Map<String, BigDecimal> mapaBaixaIdParaNufin) throws Exception {
-		Map<String, BigDecimal> mapaBaixaEstornada = new HashMap<>();
+							 Map<String, BigDecimal> mapaInfIdBaixaOrig, Map<BigDecimal, String> mapaInfIdBaixa,
+							 Map<String, BigDecimal> mapaInfTipoTituloTaxa, Map<String, BigDecimal> mapaInfBanco,
+							 Map<String, BigDecimal> mapaInfConta, Map<String, BigDecimal> mapaInfAlunos,
+							 Map<String, BigDecimal> mapaInfFinanceiro, Map<String, BigDecimal> mapaInfTipoTitulo,
+							 Map<Long, Date> mapaInfMenorDataMovBancariaPorConta, Map<BigDecimal, String> mapaInfFinanceiroBaixado,
+							 Map<BigDecimal, BigDecimal> mapaInfFinanceiroValor, Map<BigDecimal, BigDecimal> mapaInfFinanceiroBanco,
+							 Map<String, BigDecimal> mapaInfTipoTituloCodparcCartao, Map<String, BigDecimal> mapaInfIdBaixaParcelas,Map<String, BigDecimal> mapaBaixaIdParaNufin)
+			throws Exception {
 
-		LogCatcher.logInfo("Iniciando efetuarBaixa refatorado - Empresa: " + codemp);
+		LogCatcher.logInfo("\nIniciando efetuarBaixa - Empresa: " + codemp + ", com conteúdo da resposta.");
 
+
+		boolean movBanc = false;
+		SimpleDateFormat formatoOriginal = new SimpleDateFormat("yyyy-MM-dd");
+		SimpleDateFormat formatoDesejado = new SimpleDateFormat("dd/MM/yyyy");
 		Date dataAtual = new Date();
 		SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
 		Calendar calendar = Calendar.getInstance();
@@ -854,289 +807,766 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		LogCatcher.logInfo("data um dia atras: " + dataUmDiaFormatada);
 		LogCatcher.logInfo("data normal: " + dataAtualFormatada);
 
-		if (!"200".equalsIgnoreCase(response[0])) {
-			String erroMsg = "API retornou status não-200: " + response[0] + " - Resposta: " + response[1];
-			LogCatcher.logError(erroMsg);
-			selectsParaInsert.add("SELECT <#NUMUNICO#>, '" + erroMsg.replace("'", "''") + "', SYSDATE, 'Erro', "
-					+ codemp + ", '' FROM DUAL");
-			return;
-		}
+
+		BigDecimal codTipTit = BigDecimal.ZERO;
+		BigDecimal codBanco = BigDecimal.ZERO;
+		BigDecimal codConta = BigDecimal.ZERO;
+		BigDecimal nubco = BigDecimal.ZERO;
+		String dataEstorno = "";
+		BigDecimal nufin = BigDecimal.ZERO;
+		String idAluno = "";
+		String formaDePagamento = "";
+		Map<BigDecimal, String> mapIdBaixaAtual = new HashMap();
+		Map<String, BigDecimal> mapaBaixaEstornada = new HashMap<>();
 		
 
-		JsonArray jsonArray = new JsonParser().parse(response[1]).getAsJsonArray();
-		SimpleDateFormat formatoApi = new SimpleDateFormat("yyyy-MM-dd");
-		EntityFacade dwfFacade = EntityFacadeFactory.getDWFFacade(); // Obter o Facade para buscar o VO
+		try {
+			LogCatcher.logInfo("Verificando a resposta: " + response[1]);
+			JsonParser parser = new JsonParser();
 
-		for (JsonElement jsonElement : jsonArray) {
-			LogCatcher.logInfo("**INÍCIO DO LAÇO REFATORADO DO EFETUAR BAIXA DE ALUNO**");
-			JsonObject jsonObject = jsonElement.getAsJsonObject();
-			String idAluno = jsonObject.get("aluno_id").getAsString().trim();
-			String tituloId = jsonObject.get("titulo_id").getAsString();
-			String baixaId = jsonObject.get("baixa_id").getAsString();
+			//apenas debug
+			if (response[1] == null) {
+				LogCatcher.logInfo("Resposta nula recebida na efetuarBaixa - Empresa: " + codemp);
 
-			BigDecimal nufin = mapaInfFinanceiro.get(codemp + "###" + tituloId);
-			
-			LogCatcher.logInfo("Titulo ID: " + jsonObject.get("titulo_id").getAsInt());
-			LogCatcher.logInfo("Valor da Baixa: " + jsonObject.get("baixa_valor").getAsString());
-
-			idAluno = jsonObject.get("aluno_id").getAsString().trim();
-
-			LogCatcher.logInfo("IdAluno: " + idAluno);
-
-			if (nufin == null) {
-				LogCatcher.logError("Não foi possível encontrar o financeiro com id externo " + tituloId
-						+ " para a empresa " + codemp);
-				this.titulosComOutrosErros++;
-				continue;
+				return;
 			}
 
-			if (jsonObject.has("baixa_estorno_data") && !jsonObject.get("baixa_estorno_data").isJsonNull()) {
-				LogCatcher.logInfo("[ESTORNO] Iniciando processo de estorno para NUFIN: " + nufin);
-				
+			//apenas debug
+			String jsonContent = response[1];
 
-				BigDecimal nufinDaBaixa =
-						mapaBaixaIdParaNufin.get(codemp + "###" + baixaId);
+			LogCatcher.logInfo("Primeiro caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(0)));
+			LogCatcher.logInfo("\nÚltimo caractere: " + (jsonContent.isEmpty() ? "vazio" : jsonContent.charAt(jsonContent.length() - 1)));
 
-				boolean jaBaixado =
-						nufinDaBaixa != null &&
-								"S".equalsIgnoreCase(
-										mapaInfFinanceiroBaixado.getOrDefault(nufinDaBaixa, "N"));
 
-				if (jaBaixado) {
-					LogCatcher.logInfo("[ESTORNO] BaixaId " + baixaId +
-							" já estava baixada. NUFIN = " + nufinDaBaixa);
+			for (JsonElement jsonElement : parser.parse(response[1]).getAsJsonArray()) {
+				JsonObject jsonObject = jsonElement.getAsJsonObject();
+
+                LogCatcher.logInfo("**INÍCIO DO LAÇO DO EFETUAR BAIXA DE ALUNO**");
+
+				LogCatcher.logInfo("Titulo ID: " + jsonObject.get("titulo_id").getAsInt());
+				LogCatcher.logInfo("Valor da Baixa: " + jsonObject.get("baixa_valor").getAsString());
+
+				idAluno = jsonObject.get("aluno_id").getAsString().trim();
+
+				LogCatcher.logInfo("IdAluno: " + idAluno);
+
+				BigDecimal codParc = (BigDecimal) mapaInfAlunos.get(idAluno);
+				if (codParc != null) {
+					String tituloId = jsonObject.get("titulo_id").getAsString();
+					String baixaId = jsonObject.get("baixa_id").getAsString();
+					BigDecimal vlrBaixa = new BigDecimal(jsonObject.get("baixa_valor").getAsString());
+
+					BigDecimal vlrJuros = (BigDecimal) Optional.ofNullable(jsonObject.get("baixa_juros"))
+							.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+							.map(BigDecimal::new).orElse(BigDecimal.ZERO);
+					BigDecimal vlrMulta = (BigDecimal) Optional.ofNullable(jsonObject.get("baixa_multa"))
+							.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+							.map(BigDecimal::new).orElse(BigDecimal.ZERO);
+					BigDecimal vlrDesconto = (BigDecimal) Optional.ofNullable(jsonObject.get("baixa_desconto"))
+							.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+							.map(BigDecimal::new).orElse(BigDecimal.ZERO);
+					BigDecimal vlrOutrosAcrescimos = (BigDecimal) Optional
+							.ofNullable(jsonObject.get("baixa_outros_acrescimos"))
+							.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+							.map(BigDecimal::new).orElse(BigDecimal.ZERO);
+					String dataBaixa = jsonObject.get("baixa_data").getAsString();
+
+					LogCatcher.logInfo("Data Baixa: " + dataBaixa);
+					Date data = formatoOriginal.parse(dataBaixa);
+					LogCatcher.logInfo("Date Baixa: " + data);
+					String dataBaixaFormatada = formatoDesejado.format(data);
 					
-					estornarTgfFin(nufinDaBaixa, codemp);
-					LogCatcher.logInfo("[ESTORNO] Estornando NUFIN: " + nufin + ", Empresa: " + codemp);
-					mapaBaixaEstornada.put(codemp + "###" + baixaId, nufinDaBaixa);
-
-				} else {
-					LogCatcher.logInfo("[INFO] Estorno antes da baixa. " +
-							"BaixaId " + baixaId + " ficará em aberto.");
-					selectsParaInsert.add(
-							"SELECT <#NUMUNICO#>, " +
-									"'Estorno ignorado: baixa " + baixaId + " ainda não registrada', " +
-									"SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
-					LogCatcher.logInfo(
-							"SELECT <#NUMUNICO#>, " +
-									"'Estorno ignorado: baixa " + baixaId + " ainda não registrada', " +
-									"SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
-				}
-
-				continue;
-			}
-
-			try {
-				Timestamp dataBaixa = new Timestamp(
-						formatoApi.parse(jsonObject.get("baixa_data").getAsString()).getTime());
-				BigDecimal codUsuLogado = AuthenticationInfo.getCurrent().getUserID();
-
-				FinanceiroVO financeiroOriginalVO = (FinanceiroVO) dwfFacade.findEntityByPrimaryKeyAsVO("Financeiro",
-						nufin, FinanceiroVO.class);
-				if (financeiroOriginalVO == null) {
-					throw new Exception(
-							"Registro Financeiro com NUFIN " + nufin + " não encontrado no banco de dados.");
-				}
-
-				try {
-				LogCatcher.logInfo("[INFO] Ativando bypass de validação do dono do caixa para esta transação...");
-			    JapeSession.putProperty("ignorar.validacao.usuario.caixa", Boolean.TRUE);
-			    
-				BaixaHelper baixaHelper = new BaixaHelper(nufin, codUsuLogado, dataBaixa);
-				baixaHelper.addListener(new CustomFieldsListener());
-				baixaHelper.addListener(new AcompanhamentoBaixaListener());
-				
-				DadosBaixa dadosBaixa = baixaHelper.montaDadosBaixa(dataBaixa, false, false);
-
-		        BigDecimal valorPagoPelaApi = jsonObject.get("baixa_valor").getAsBigDecimal();
-		        BigDecimal valorDevidoCalculado = BigDecimal.valueOf(dadosBaixa.getValoresBaixa().getVlrTotal());
-		        JsonArray formasPagamento = jsonObject.getAsJsonArray("formas_de_pagamento");
-		        
-				dadosBaixa.getValoresBaixa().setVlrJuros(jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue());
-				dadosBaixa.getValoresBaixa().setVlrMulta(jsonObject.get("baixa_multa").getAsBigDecimal().doubleValue());
-				dadosBaixa.getValoresBaixa().setVlrDesconto(jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue());
-				
-				dadosBaixa.getValoresBaixa().setTipoJuros(TipoJurosMulta.INCLUSO);
-	            dadosBaixa.getValoresBaixa().setTipoMulta(TipoJurosMulta.INCLUSO);
-
-		        int comparacao = valorPagoPelaApi.compareTo(valorDevidoCalculado);
-
-		        if (comparacao > 0) {
-		            BigDecimal diferenca = valorPagoPelaApi.subtract(valorDevidoCalculado); 
-		            LogCatcher.logInfo(String.format("Valor pago (%s) é MAIOR que o devido (%s). A diferença de R$ %s será tratada como JUROS.", valorPagoPelaApi, valorDevidoCalculado, diferenca));
-		            double jurosDaApi = jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue();
-		            dadosBaixa.getValoresBaixa().setVlrJuros(jurosDaApi + diferenca.doubleValue());	            
-		            dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MAIOR_JUROS);
-
-		        } else if (comparacao < 0) {
-		            BigDecimal diferenca = valorDevidoCalculado.subtract(valorPagoPelaApi); 
-
-		            if (formasPagamento.size() == 1) {
-		                LogCatcher.logInfo(String.format("Valor pago (%s) é MENOR que o devido (%s) com pagamento único. A diferença de R$ %s será tratada como DESCONTO.", valorPagoPelaApi, valorDevidoCalculado, diferenca));
-		                double descontoDaApi = jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue();
-		                dadosBaixa.getValoresBaixa().setVlrDesconto(descontoDaApi + diferenca.doubleValue());
-		                
-		                dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MENOR_DESCONTO);
-		            } else {
-		                LogCatcher.logInfo(String.format("Valor pago (%s) é MENOR que o devido (%s) com múltiplos pagamentos. Será gerada uma PENDÊNCIA para a diferença.", valorPagoPelaApi, valorDevidoCalculado));
-		                
-		                dadosBaixa.getDescisaoBaixa().setDescisao(DadosBaixa.DescisaoBaixa.VALOR_MENOR_PENDENCIA);
-		            }
-		        }
-			    
-			    dadosBaixa.getValoresBaixa().setVlrTotal(valorPagoPelaApi.doubleValue());
-		        if(comparacao <= 0) dadosBaixa.getValoresBaixa().setVlrJuros(jsonObject.get("baixa_juros").getAsBigDecimal().doubleValue());
-		        if(comparacao >= 0 || formasPagamento.size() > 1) dadosBaixa.getValoresBaixa().setVlrDesconto(jsonObject.get("baixa_desconto").getAsBigDecimal().doubleValue());
-						        
-				
-
-		        dadosBaixa.getValoresBaixa().setVlrTotal(valorPagoPelaApi.doubleValue());
-				String idExterno = jsonObject.get("local_pagamento_id").getAsString();
-				dadosBaixa.getDadosBancarios().setCodConta(mapaInfConta.get(codemp + "###" + idExterno));
-				dadosBaixa.getDadosBancarios().setCodBanco(mapaInfBanco.get(codemp + "###" + idExterno));
-
-
-				
-				
-				dadosBaixa.getVariosTiposTitulos().clear();
-				FinanceiroVO modeloPagamentoVO = (FinanceiroVO) financeiroOriginalVO.buildClone().wrapInterface(FinanceiroVO.class);
-				
-				modeloPagamentoVO.setAceptTransientProperties(true);
-				modeloPagamentoVO.setProperty("AD_VLRDESCINT", jsonObject.get("baixa_desconto").getAsBigDecimal());
-				modeloPagamentoVO.setProperty("AD_VLRMULTAINT", jsonObject.get("baixa_multa").getAsBigDecimal());
-				modeloPagamentoVO.setProperty("AD_VLRJUROSINT", jsonObject.get("baixa_juros").getAsBigDecimal());
-				modeloPagamentoVO.setProperty("AD_BAIXAID", baixaId);
-                
-				for (JsonElement pagamentoEl : formasPagamento) {
-					JsonObject pagamentoObj = pagamentoEl.getAsJsonObject();
-					String formaPagamentoId = pagamentoObj.get("forma_pagamento_id").getAsString().trim();
-
-					BigDecimal codTipTit = mapaInfTipoTitulo.get(codemp + "###" + formaPagamentoId);
-					if (codTipTit == null || codTipTit.compareTo(BigDecimal.ZERO) == 0) {
-						throw new Exception(
-								"Tipo de Título não configurado para a forma de pagamento: " + formaPagamentoId);
+					nufin = (BigDecimal) mapaInfFinanceiro.get(codemp + "###" + tituloId);
+					
+					
+					// Verificar se o título já foi baixado no banco (TGFFIN)
+					if (tituloJaBaixadoNoBanco(tituloId, codemp)) {
+					    LogCatcher.logInfo("[VALIDAÇÃO] Título " + tituloId + " já está baixado e estornado no banco para a empresa " + codemp + ". Ignorando estorno e nova baixa.");
+					    selectsParaInsert.add(
+					        "SELECT <#NUMUNICO#>, 'Estorno ignorado: título " + tituloId + " já baixado e estornado', SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
+					    continue; // Pula o título atual
 					}
 
 
-				    FinanceiroVO voPagamento = (FinanceiroVO) modeloPagamentoVO.buildClone().wrapInterface(FinanceiroVO.class);
-				    voPagamento.setCODTIPTIT(codTipTit);
-				    voPagamento.setVLRBAIXA(pagamentoObj.get("forma_pagamento_valor").getAsBigDecimal());
-					
 
-	                if ("CARTAO_CREDITO".equals(formaPagamentoId) || "CARTAO_DEBITO".equals(formaPagamentoId)) {
-	                     voPagamento.setProperty("AD_BAIXA_CARTAO", "S");
-	                     voPagamento.setProperty("AD_NSU_CART", pagamentoObj.get("forma_pagamento_nsu").getAsString());
-	                     voPagamento.setProperty("AD_AUTORIZACAO_CART", pagamentoObj.get("forma_pagamento_autorizacao").getAsString());
-	                } else {
-	                     voPagamento.setProperty("AD_BAIXA_CARTAO", "N");
-	                }
-	                dadosBaixa.addTipoTitulo(voPagamento);	            
-	            }
-				
-				   baixaHelper.baixar(dadosBaixa);
-				   
-			    } finally {
-			        LogCatcher.logInfo("[INFO] Desativando bypass de validação do dono do caixa.");
-			        JapeSession.putProperty("ignorar.validacao.usuario.caixa", null);
-			    }
 
-				LogCatcher.logInfo("[SUCESSO] Baixa para o NUFIN " + nufin + " (Baixa ID: " + baixaId
-						+ ") realizada com sucesso via BaixaHelper.");
-				mapaInfFinanceiroBaixado.put(nufin, "S");
-				
-				this.titulosBaixadosComSucesso++;
+					if (jsonObject.has("baixa_estorno_data") && !jsonObject.get("baixa_estorno_data").isJsonNull()) {
+						LogCatcher.logInfo("Detectado estorno para título ID: " + tituloId + " - Data estorno: " + dataEstorno);
 
-			} catch (Exception e) {
-				String rawErroMsg = e.getMessage();
+						dataEstorno = jsonObject.get("baixa_estorno_data").getAsString();
+					} else {
+						LogCatcher.logInfo("Entrou no else de estorno");
+						dataEstorno = null;
+					}
 
-				if (rawErroMsg != null && rawErroMsg.contains("Título já baixado")) {
-					this.titulosJaBaixadosIgnorados++;
-					LogCatcher.logInfo("[AVISO] Tentativa de baixa para NUFIN " + nufin + " (Baixa ID: " + baixaId + ") ignorada. Motivo: Título já baixado!");
-				} else {			
-					this.titulosComOutrosErros++;
-					String erroDetalhado = "Falha ao processar baixa para NUFIN " + nufin + " (Baixa ID: " + baixaId + "). Motivo: " + rawErroMsg;
-					LogCatcher.logError(erroDetalhado);
-					selectsParaInsert.add("SELECT <#NUMUNICO#>, '" + erroDetalhado.replace("'", "''") + "', SYSDATE, 'Erro', " + codemp + ", '" + idAluno + "' FROM DUAL");
+					String idExterno = jsonObject.get("local_pagamento_id").getAsString();
+					codBanco = (BigDecimal) mapaInfBanco.get(codemp + "###" + idExterno);
+					LogCatcher.logInfo("Banco: " + codBanco);
+					codConta = (BigDecimal) mapaInfConta.get(codemp + "###" + idExterno);
+					LogCatcher.logInfo("Conta: " + codConta);
+					String nsu_Cartao = "";
+					String autorizacao = "";
+
+
+					if (codConta != null && codBanco != null) {
+						JsonArray formas_de_pagamento = jsonObject.getAsJsonArray("formas_de_pagamento");
+						LogCatcher.logInfo("quantidade de formar de pagamento: " + formas_de_pagamento.size());
+						BigDecimal taxaCartao = BigDecimal.ZERO;
+
+						if (nufin != null && nufin.compareTo(BigDecimal.ZERO) != 0 && formas_de_pagamento.size() == 1) {
+							BigDecimal codParcCartao = BigDecimal.ZERO;
+							String dtCredito = "";
+
+							for (JsonElement formas_de_pagamentoElement : formas_de_pagamento) {
+
+								JsonObject formas_de_pagamentoObject = formas_de_pagamentoElement.getAsJsonObject();
+								LogCatcher.logInfo("Forma de pagamento: "
+										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
+
+
+
+								LogCatcher.logInfo("codemp: " + codemp);
+								formaDePagamento = formas_de_pagamentoObject.get("forma_pagamento_id").getAsString()
+										.trim();
+
+								String chaveCodTipTit = codemp + "###" + formaDePagamento;
+								LogCatcher.logInfo("[DEBUG] Buscando codTipTit com chave: " + chaveCodTipTit);
+								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveCodTipTit)).orElse(BigDecimal.ZERO);
+								LogCatcher.logInfo("[RESULTADO] codTipTit encontrado: " + codTipTit);
+
+								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
+								} else {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaDePagamento);
+								}
+
+								//modificado
+								taxaCartao = (BigDecimal) Optional
+										.ofNullable((BigDecimal) mapaInfTipoTituloTaxa
+												.get(codemp + "###" + formaDePagamento)) // removed "###" + qtdParcelas
+										.orElse(BigDecimal.ZERO);
+								LogCatcher.logInfo("Taxa Cartão: " + taxaCartao);
+
+								nsu_Cartao = (String) Optional.ofNullable(jsonObject.get("forma_pagamento_nsu"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+								autorizacao = (String) Optional
+										.ofNullable(jsonObject.get("forma_pagamento_autorizacao"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+
+								//modificado
+								codParcCartao = (BigDecimal) Optional
+										.ofNullable((BigDecimal) mapaInfTipoTituloCodparcCartao
+												.get(codemp + "###" + formaDePagamento)) // removed "###" + qtdParcelas
+										.orElse(BigDecimal.ZERO);
+								dtCredito = (String) Optional.ofNullable(jsonObject.get("forma_pagamento_data_credito"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+							}
+
+							LogCatcher.logInfo("[USO] Enviando codTipTit para update/insert: " + codTipTit);
+
+							if (taxaCartao.compareTo(BigDecimal.ZERO) != 0) {
+								vlrBaixa = vlrBaixa
+										.subtract(vlrBaixa.multiply(taxaCartao).divide(BigDecimal.valueOf(100L)));
+							}
+						
+							LogCatcher.logInfo("estorno: " + dataEstorno);
+							LogCatcher.logInfo("Data estorno: " + jsonObject.get("baixa_estorno_data"));
+							Date dtMinMovConta = (Date) mapaInfMenorDataMovBancariaPorConta
+									.get(Long.parseLong(codConta.toString()));
+							LogCatcher.logInfo("dtMinMovConta: " + dtMinMovConta);
+							LogCatcher.logInfo("Verificando dados de estorno - dataEstorno: " + dataEstorno);
+							LogCatcher.logInfo("Status de baixa do titulo: " + mapaInfFinanceiroBaixado.get(nufin));
+
+
+							if (dataEstorno != null) {
+								LogCatcher.logInfo("[ESTORNO] Iniciando processo de estorno para NUFIN: " + nufin);
+								
+
+								BigDecimal nufinDaBaixa =
+										mapaBaixaIdParaNufin.get(codemp + "###" + baixaId);
+
+								boolean jaBaixado =
+										nufinDaBaixa != null &&
+												"S".equalsIgnoreCase(
+														mapaInfFinanceiroBaixado.getOrDefault(nufinDaBaixa, "N"));
+
+								if (jaBaixado) {
+									LogCatcher.logInfo("[ESTORNO] BaixaId " + baixaId +
+											" já estava baixada. NUFIN = " + nufinDaBaixa);
+									
+									// CORREÇÃO: Usar a variável 'nufin' que representa o NUFIN original da transação
+								    estornarTgfFin(nufin, codemp);
+									LogCatcher.logInfo("[ESTORNO] Estornando NUFIN: " + nufin + ", Empresa: " + codemp);
+									mapaBaixaEstornada.put(codemp + "###" + baixaId, nufinDaBaixa);
+
+								} else {
+									LogCatcher.logInfo("[INFO] Estorno antes da baixa. " +
+											"BaixaId " + baixaId + " ficará em aberto.");
+									selectsParaInsert.add(
+											"SELECT <#NUMUNICO#>, " +
+													"'Estorno ignorado: baixa " + baixaId + " ainda não registrada', " +
+													"SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
+									LogCatcher.logInfo(
+											"SELECT <#NUMUNICO#>, " +
+													"'Estorno ignorado: baixa " + baixaId + " ainda não registrada', " +
+													"SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
+								}
+							}
+
+
+
+							else if (dtMinMovConta != null) {
+								LogCatcher.logInfo("[BAIXA-NORMAL] Processando baixa normal (sem estorno)");
+								LogCatcher.logInfo("[BAIXA-NORMAL] TituloId:" + tituloId + ", NUFIN:" + nufin);
+
+								if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
+									this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo: " + nufin
+											+ " Não Efetuada Pois a Data Minima de Movimentação Bancaria "
+											+ "Para a Conta " + codConta + " é Superior a Data de Baixa: "
+											+ dataBaixaFormatada + "', SYSDATE, 'Aviso', " + codemp + ", '" + idAluno
+											+ "' FROM DUAL");
+								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+									if ("N".equalsIgnoreCase((String) mapaInfFinanceiroBaixado.get(nufin))) {
+										LogCatcher.logInfo("Chegou no update");
+										if (vlrBaixa.compareTo((BigDecimal) mapaInfFinanceiroValor.get(nufin)) != 0
+												|| nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+											if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+
+												this.updateFinCartao(codTipTit, nufin, codBanco, codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId, codemp, codParc, dtCredito, nsu_Cartao, autorizacao);
+											} else {
+												LogCatcher.logInfo("Atualizando NUFIN: " + nufin + " com valor: " + vlrBaixa);
+
+												this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta,
+														vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos,
+														baixaId, codemp);
+											}
+										} else {
+											LogCatcher.logInfo("Entrou no if do valor");
+											this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta, vlrBaixa,
+													vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId,
+													codemp);
+										}
+
+										LogCatcher.logInfo("vlrDesconto: " + vlrDesconto);
+										LogCatcher.logInfo("vlrJuros: " + vlrJuros);
+										LogCatcher.logInfo("vlrMulta: " + vlrMulta);
+
+										if (nsu_Cartao == null || nsu_Cartao.isEmpty()) {
+											nubco = this.insertMovBancaria(codConta, vlrBaixa, nufin,
+													dataBaixaFormatada, codemp);
+											LogCatcher.logInfo("Passou da mov bancaria: " + nubco);
+											LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
+											this.updateBaixa(nufin, nubco, vlrBaixa, dataBaixaFormatada, baixaId,
+													codemp);
+
+											LogCatcher.logInfo("[UPDATE] Baixa realizada - NUFIN: " + nufin +
+													", NUBCO: " + nubco +
+													", Valor: " + vlrBaixa +
+													", Data: " + dataBaixaFormatada +
+													", Baixa ID: " + baixaId +
+													", Empresa: " + codemp);
+
+											mapIdBaixaAtual.put(nufin, baixaId);
+											mapaInfFinanceiroBaixado.put(nufin, "S");
+											movBanc = true;
+										}
+									} else {
+										LogCatcher.logInfo("Titulo ja baixado");
+										String baixaIdExist = (String) Optional
+												.ofNullable((String) mapaInfIdBaixa.get(nufin)).orElse("");
+										String baixaIdAtual = (String) Optional
+												.ofNullable((String) mapIdBaixaAtual.get(nufin)).orElse("");
+										BigDecimal baixaIdOrig = (BigDecimal) Optional
+												.ofNullable(
+														(BigDecimal) mapaInfIdBaixaOrig.get(baixaId + "###" + nufin))
+												.orElse(BigDecimal.ZERO);
+										LogCatcher.logInfo("baixaIdExist: " + baixaIdExist);
+										LogCatcher.logInfo("baixaIdAtual: " + baixaIdAtual);
+										LogCatcher.logInfo("baixaIdOrig: " + baixaIdOrig);
+										if (!baixaIdExist.isEmpty() && !baixaIdExist.equalsIgnoreCase(baixaId)
+												&& !baixaIdExist.equalsIgnoreCase("N")
+												&& baixaIdOrig.compareTo(BigDecimal.ZERO) == 0
+												|| !baixaIdAtual.isEmpty() && !baixaIdAtual.equalsIgnoreCase(baixaId)) {
+											LogCatcher.logInfo("[DUPLICIDADE] Baixa duplicada detectada para NUFIN: " + nufin + " e baixa ID: " + baixaId);
+
+											BigDecimal nufinDup = this.insertFin(nufin, vlrBaixa, codTipTit, codemp);
+
+											if (nsu_Cartao == null || nsu_Cartao.isEmpty()) {
+												this.updateFinComVlrBaixa(codTipTit, nufinDup, codBanco, codConta,
+														vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos,
+														baixaId, codemp);
+												nubco = this.insertMovBancaria(codConta, vlrBaixa, nufinDup,
+														dataBaixaFormatada, codemp);
+												movBanc = true;
+												this.updateBaixa(nufinDup, nubco, vlrBaixa, dataBaixaFormatada, baixaId,
+														codemp);
+												LogCatcher.logInfo("[UPDATE DUPLICADA] Baixa duplicada registrada - NUFIN: " + nufinDup +
+														", NUBCO: " + nubco +
+														", Valor: " + vlrBaixa +
+														", Data: " + dataBaixaFormatada +
+														", Baixa ID: " + baixaId +
+														", Empresa: " + codemp);
+												mapaInfFinanceiroBaixado.put(nufinDup, "S");
+												mapIdBaixaAtual.put(nufinDup, baixaId);
+												mapaInfIdBaixaOrig.put(baixaId + "###" + nufin, nufinDup);
+											}
+
+											LogCatcher.logInfo("Fim baixa dupla");
+										}
+									}
+								} else {
+									this.selectsParaInsert.add(
+											"SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento (1): "
+													+ formaDePagamento + "' , SYSDATE, 'Aviso', " + codemp
+													+ ", '' FROM DUAL");
+									LogCatcher.logInfo(
+											"SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento (1): "
+													+ formaDePagamento + "' , SYSDATE, 'Aviso', " + codemp
+													+ ", '' FROM DUAL");
+								}
+							} else {
+								this.selectsParaInsert.add(
+										"SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: "
+												+ codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '" + idAluno
+												+ "' FROM DUAL");
+
+								LogCatcher.logInfo(
+										"SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: "
+												+ codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '" + idAluno
+												+ "' FROM DUAL");
+							}
+						} else if (nufin != null && nufin.compareTo(BigDecimal.ZERO) != 0
+								&& formas_de_pagamento.size() > 1) {
+							LogCatcher.logInfo("entrou em mais de uma forma de pagamento");
+							int countBaixa = 0;
+
+							for (JsonElement formas_de_pagamentoElement : formas_de_pagamento) {
+								JsonObject formas_de_pagamentoObject = formas_de_pagamentoElement.getAsJsonObject();
+
+								LogCatcher.logInfo("Forma de pagamento: "
+										+ formas_de_pagamentoObject.get("forma_pagamento_id").getAsString());
+
+
+								LogCatcher.logInfo("codemp: " + codemp);
+
+
+								// Trecho modificado para lidar com qtdParcelas ausente em formas_de_pagamento > 1
+								BigDecimal qtdParcelas = BigDecimal.ZERO;
+								if (formas_de_pagamentoObject.has("forma_pagamento_qtdparcelas") &&
+										!formas_de_pagamentoObject.get("forma_pagamento_qtdparcelas").isJsonNull()) {
+									qtdParcelas = new BigDecimal(formas_de_pagamentoObject.get("forma_pagamento_qtdparcelas").getAsString());
+								}
+								String formaPagamento = formas_de_pagamentoObject.get("forma_pagamento_id").getAsString().trim();
+
+								String chaveComParcelas = codemp + "###" + formaPagamento + (qtdParcelas.compareTo(BigDecimal.ZERO) > 0 ? "###" + qtdParcelas : "");
+								LogCatcher.logInfo("[DEBUG] Buscando codTipTit com chave: " + chaveComParcelas);
+								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveComParcelas)).orElse(BigDecimal.ZERO);
+								LogCatcher.logInfo("[RESULTADO] codTipTit (com fallback): " + codTipTit);
+								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido: " + codTipTit);
+								} else {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para chave: " + chaveComParcelas);
+								}
+
+
+								LogCatcher.logInfo("[DEBUG] Buscando codTipTit para múltiplas formas com chave: " + chaveComParcelas);
+								codTipTit = Optional.ofNullable(mapaInfTipoTitulo.get(chaveComParcelas)).orElse(BigDecimal.ZERO);
+								LogCatcher.logInfo("[RESULTADO] codTipTit (múltiplas formas): " + codTipTit);
+								if (codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é válido (múltiplas formas): " + codTipTit);
+								} else {
+									LogCatcher.logInfo("[VALIDAÇÃO] codTipTit é inválido (ZERO) para forma: " + formaPagamento + " e parcelas: " + qtdParcelas);
+								}
+
+
+								LogCatcher.logInfo("qtd Parcelas: " + qtdParcelas);
+
+
+//								LogCatcher.logInfo("Inicio do Mapa " + codTipTit);
+//
+//								for (Entry<String, BigDecimal> entry : mapaInfTipoTitulo.entrySet()) {
+//									String key = entry.getKey()
+//									BigDecimal val = entry.getValue();
+//									LogCatcher.logInfo("Entidade: " + key + " " + val);
+//								}
+//								LogCatcher.logInfo("Fim  do Mapa " + codTipTit);
+
+								LogCatcher.logInfo("String construída: " + codemp + "###"
+									    + formas_de_pagamentoObject.get("forma_pagamento_id").getAsString().trim());
+
+
+								codTipTit = (BigDecimal) Optional
+									    .ofNullable(
+									        (BigDecimal) mapaInfTipoTitulo.get(
+									            codemp + "###" + formas_de_pagamentoObject.get("forma_pagamento_id").getAsString().trim()
+									        )
+									    )
+									    .orElse(BigDecimal.ZERO);
+
+
+
+								LogCatcher.logInfo("Tipo de titulo depois do chaveamento:" + codTipTit);
+
+
+								taxaCartao = (BigDecimal) Optional
+										.ofNullable(
+												(BigDecimal) mapaInfTipoTituloTaxa.get(codemp + "###"
+														+ formas_de_pagamentoObject.get("forma_pagamento_id")
+														.getAsString()
+														+ "###" + qtdParcelas))
+										.orElse(BigDecimal.ZERO);
+								nsu_Cartao = (String) Optional
+										.ofNullable(formas_de_pagamentoObject.get("forma_pagamento_nsu"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+								autorizacao = (String) Optional
+										.ofNullable(formas_de_pagamentoObject.get("forma_pagamento_autorizacao"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+								BigDecimal codParcCartao = (BigDecimal) Optional
+										.ofNullable(
+												(BigDecimal) mapaInfTipoTituloCodparcCartao.get(codemp + "###"
+														+ formas_de_pagamentoObject.get("forma_pagamento_id")
+														.getAsString()
+														+ "###" + qtdParcelas))
+										.orElse(BigDecimal.ZERO);
+								String dtCredito = (String) Optional
+										.ofNullable(formas_de_pagamentoObject.get("forma_pagamento_data_credito"))
+										.filter((element) -> !element.isJsonNull()).map(JsonElement::getAsString)
+										.orElse("");
+								vlrBaixa = formas_de_pagamentoObject.get("forma_pagamento_valor").getAsBigDecimal();
+								if (taxaCartao.compareTo(BigDecimal.ZERO) != 0) {
+									vlrBaixa.subtract(vlrBaixa.multiply(taxaCartao).divide(BigDecimal.valueOf(100L)));
+								}
+
+
+								LogCatcher.logInfo("estorno: " + dataEstorno);
+								LogCatcher.logInfo("Data estorno: " + jsonObject.get("baixa_estorno_data"));
+
+
+
+								Date dtMinMovConta = (Date) mapaInfMenorDataMovBancariaPorConta
+										.get(Long.parseLong(codConta.toString()));
+
+								LogCatcher.logInfo("dtMinMovConta: " + dtMinMovConta);
+								if (countBaixa == 0) {
+									System.out.println("contagem 1");
+									if (dataEstorno == null) {
+										if (dtMinMovConta != null) {
+											if (!data.equals(dtMinMovConta) && !data.after(dtMinMovConta)) {
+												this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo: "
+														+ nufin
+														+ " Não Efetuada Pois a Data Minima de Movimentação Bancaria "
+														+ "Para a Conta " + codConta + " é Superior a Data de Baixa: "
+														+ dataBaixaFormatada + "', SYSDATE, 'Aviso', " + codemp + ", '"
+														+ idAluno + "' FROM DUAL");
+
+												LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Baixa Para o Titulo: "
+														+ nufin
+														+ " Não Efetuada Pois a Data Minima de Movimentação Bancaria "
+														+ "Para a Conta " + codConta + " é Superior a Data de Baixa: "
+														+ dataBaixaFormatada + "', SYSDATE, 'Aviso', " + codemp + ", '"
+														+ idAluno + "' FROM DUAL");
+											} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0) {
+												if ("N".equalsIgnoreCase(
+														(String) mapaInfFinanceiroBaixado.get(nufin))) {
+													System.out.println("Chegou no update");
+													LogCatcher.logInfo("Chegou no update");
+													if (vlrBaixa.compareTo(
+															(BigDecimal) mapaInfFinanceiroValor.get(nufin)) != 0
+															|| nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+														if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+															//substituido por
+															this.updateFinCartao(codTipTit, nufin, codBanco, codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta, vlrOutrosAcrescimos, baixaId, codemp, codParc, dtCredito, nsu_Cartao, autorizacao);
+														} else {
+															LogCatcher.logInfo("Entrou no else do valor");
+															this.updateFinComVlrBaixa(codTipTit, nufin, codBanco,
+																	codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta,
+																	vlrOutrosAcrescimos, baixaId, codemp);
+														}
+													} else {
+														LogCatcher.logInfo("Entrou no if do valor");
+														this.updateFinComVlrBaixa(codTipTit, nufin, codBanco, codConta,
+																vlrBaixa, vlrDesconto, vlrJuros, vlrMulta,
+																vlrOutrosAcrescimos, baixaId, codemp);
+													}
+
+
+
+													LogCatcher.logInfo("vlrDesconto: " + vlrDesconto);
+													LogCatcher.logInfo("vlrJuros: " + vlrJuros);
+													LogCatcher.logInfo("vlrMulta: " + vlrMulta);
+
+													if (nsu_Cartao == null || nsu_Cartao.isEmpty()) {
+														nubco = this.insertMovBancaria(codConta, vlrBaixa, nufin,
+																dataBaixaFormatada, codemp);
+
+														LogCatcher.logInfo("Passou da mov bancaria: " + nubco);
+														LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
+
+														this.updateBaixaParcial(nufin, nubco, vlrBaixa,
+																dataBaixaFormatada, codemp);
+														movBanc = true;
+														mapaInfFinanceiroBaixado.put(nufin, "S");
+														mapIdBaixaAtual.put(nufin, baixaId);
+													}
+
+													++countBaixa;
+												} else {
+													LogCatcher.logInfo("Financeiro " + nufin + " já baixado");
+													String baixaIdExist = (String) Optional
+															.ofNullable((String) mapaInfIdBaixa.get(nufin)).orElse("");
+													String baixaIdAtual = (String) Optional
+															.ofNullable((String) mapIdBaixaAtual.get(nufin)).orElse("");
+													BigDecimal baixaIdOrig = (BigDecimal) Optional
+															.ofNullable((BigDecimal) mapaInfIdBaixaOrig
+																	.get(baixaId + "###" + nufin))
+															.orElse(BigDecimal.ZERO);
+
+													LogCatcher.logInfo("baixaIdExist: " + baixaIdExist);
+													LogCatcher.logInfo("baixaIdAtual: " + baixaIdAtual);
+													LogCatcher.logInfo("baixaIdOrig: " + baixaIdOrig);
+
+													if (!baixaIdExist.isEmpty()
+															&& !baixaIdExist.equalsIgnoreCase(baixaId)
+															&& !baixaIdExist.equalsIgnoreCase("N")
+															&& baixaIdOrig.compareTo(BigDecimal.ZERO) == 0
+															|| !baixaIdAtual.isEmpty()
+															&& !baixaIdAtual.equalsIgnoreCase(baixaId)) {
+														System.out.println("Baixa Dupla");
+														if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+															this.insertFinCartao(nufin, vlrBaixa, codTipTit, codemp, codParc, dtCredito, baixaId);
+															++countBaixa;
+
+
+														} else {
+															BigDecimal nufinDup = this.insertFin(nufin, vlrBaixa, codTipTit, codemp);
+															this.updateFinComVlrBaixa(codTipTit, nufinDup, codBanco,
+																	codConta, vlrBaixa, vlrDesconto, vlrJuros, vlrMulta,
+																	vlrOutrosAcrescimos, baixaId, codemp);
+															nubco = this.insertMovBancaria(codConta, vlrBaixa, nufinDup,
+																	dataBaixaFormatada, codemp);
+															movBanc = true;
+															this.updateBaixa(nufinDup, nubco, vlrBaixa,
+																	dataBaixaFormatada, baixaId, codemp);
+															LogCatcher.logInfo("[UPDATE PARCIAL] Baixa parcial por múltiplas formas - NUFIN: " + nufinDup +
+																	", NUBCO: " + nubco +
+																	", Valor: " + vlrBaixa +
+																	", Data: " + dataBaixaFormatada +
+																	", Baixa ID: " + baixaId +
+																	", Empresa: " + codemp);
+															mapaInfFinanceiroBaixado.put(nufinDup, "S");
+															mapaInfIdBaixaOrig.put(baixaId + "###" + nufin, nufinDup);
+															++countBaixa;
+															LogCatcher.logInfo("Atualizando baixa com NUBCO: " + nubco + " | NUFIN: " + nufin + " | Baixa ID: " + baixaId);
+
+														}
+
+														LogCatcher.logInfo("Fim baixa dupla");
+													}
+												}
+											} else {
+												this.selectsParaInsert.add(
+														"SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento (2)"
+																+ formas_de_pagamentoObject.get("forma_pagamento_id")
+																+ "' , SYSDATE, 'Aviso', " + codemp + ", '" + idAluno + "' FROM DUAL");
+
+												LogCatcher.logInfo(
+														"SELECT <#NUMUNICO#>, 'Sem \"de para\" de Tipo de Titulo Configurado Para o Metodo de Pagamento (2): "
+																+ formas_de_pagamentoObject.get("forma_pagamento_id")
+																+ "' , SYSDATE, 'Aviso', " + codemp + ", '" + idAluno
+																+ "' FROM DUAL");
+											}
+										} else {
+											this.selectsParaInsert.add(
+													"SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: "
+															+ codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '"
+															+ idAluno + "' FROM DUAL");
+											LogCatcher.logInfo(
+													"SELECT <#NUMUNICO#>, 'Data Minima de Injeção de Saldo Não Localizada Para a Conta: "
+															+ codConta + "' , SYSDATE, 'Aviso', " + codemp + ", '"
+															+ idAluno + "' FROM DUAL");
+										}
+									} else if ("S".equalsIgnoreCase((String) mapaInfFinanceiroBaixado.get(nufin))) {
+										nubco = (BigDecimal) mapaInfFinanceiroBanco.get(nufin);
+										this.estornarTgfFin(nufin, codemp);
+									}
+								} else if (codTipTit != null && codTipTit.compareTo(BigDecimal.ZERO) != 0
+										&& countBaixa > 0) {
+									LogCatcher.logInfo("contagem 2");
+									if (nsu_Cartao != null && !nsu_Cartao.isEmpty()) {
+										this.insertFinCartao(nufin, vlrBaixa, codTipTit, codemp, codParc, dtCredito, baixaId);
+									} else {
+										BigDecimal nufinDup = this.insertFin(nufin, vlrBaixa, codTipTit, codemp);
+										nubco = this.insertMovBancaria(codConta, vlrBaixa, nufinDup, dataBaixaFormatada,
+												codemp);
+										movBanc = true;
+
+										LogCatcher.logInfo("Passou da mov bancaria duplicada: " + nubco);
+										LogCatcher.logInfo("vlrBaixa: " + vlrBaixa);
+
+										this.updateBaixa(nufinDup, nubco, vlrBaixa, dataBaixaFormatada, baixaId,
+												codemp);
+										mapaInfFinanceiroBaixado.put(nufinDup, "S");
+										mapIdBaixaAtual.put(nufinDup, baixaId);
+									}
+
+									++countBaixa;
+								}
+							}
+						} else {
+							LogCatcher.logError("Não foi possivel encontrar financeiro com id externo " + tituloId);
+						}
+					} else {
+						this.selectsParaInsert
+								.add("SELECT <#NUMUNICO#>, 'Sem \"de para\" Configurado para o local de pagamento (3): "
+										+ idExterno + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
+						LogCatcher.logError("SELECT <#NUMUNICO#>, 'Sem \"de para\" Configurado para o local de pagamento: "
+								+ idExterno + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
+					}
 				}
-			}
-		}
-		String resumo = String.format("Títulos baixados com sucesso: %d, Títulos já baixados (ignorados): %d, Títulos com outros erros: %d.",
-	            this.titulosBaixadosComSucesso,
-	            this.titulosJaBaixadosIgnorados,
-	            this.titulosComOutrosErros);
-	    
-	    this.resumoExecucao = resumo; 
 
-	    LogCatcher.logInfo("Finalizando um lote do efetuarBaixa.");
+				movBanc = false;
+				nubco = BigDecimal.ZERO;
+			}
+		} catch (Exception e) {
+			LogCatcher.logError(e);
+			e.printStackTrace();
+			LogCatcher.logError("[ERRO] Erro durante execução de efetuarBaixa: " + e.getMessage());
+
+			if (movBanc) {
+				this.estornarTgfFin(nufin, codemp);
+				LogCatcher.logInfo("Apagou mov bank");
+			}
+
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas: " + e.getMessage()
+					+ "', SYSDATE, 'Erro', " + codemp + ", '" + idAluno + "' FROM DUAL");
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Mensagem de erro nas Baixas: " + e.getMessage()
+					+ "', SYSDATE, 'Erro', " + codemp + ", '" + idAluno + "' FROM DUAL");
+
+
+
+			LogCatcher.logError("Erro de parse JSON: " + e.getMessage());
+			LogCatcher.logError("Conteúdo que causou o erro: " + response[1]);
+
+			throw e;
+		}
+
 	}
 	
 
 	private static final int MAX_REQUESTS_PER_MINUTE = 60;
 	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
 	private static final Queue<Long> requestTimestamps = new LinkedList<>();
-	private static final int MAX_RETRIES = 3; 
-	private static final long INITIAL_RETRY_DELAY_MS = 2000; 
 
-	public synchronized String[] apiGet(String ur, String token) throws Exception {
-	    int attempt = 0;
-	    while (attempt < MAX_RETRIES) {
-	        try {
-	            long currentTime = System.currentTimeMillis();
-	            requestTimestamps.removeIf(timestamp -> currentTime - timestamp > ONE_MINUTE_IN_MS);
+	public synchronized String[] apiGet2(String ur, String token) throws Exception {
+	    long currentTime = System.currentTimeMillis();
+	    requestTimestamps.removeIf(timestamp -> 
+	        currentTime - timestamp > ONE_MINUTE_IN_MS);
 
-	            if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
-	                long oldestRequestTime = requestTimestamps.peek();
-	                long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
-	                if (waitTime > 0) {
-	                    LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. Aguardando " + waitTime + "ms");
-	                    Thread.sleep(waitTime);
-	                }
-	            }
-	            requestTimestamps.offer(System.currentTimeMillis());
 
-	            URL obj = new URL(ur.replace(" ", "%20"));
-	            HttpURLConnection https = (HttpURLConnection) obj.openConnection();
-	            https.setRequestMethod("GET");
-	            https.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-	            https.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-	            https.setRequestProperty("Accept", "application/json");
-	            https.setRequestProperty("Authorization", "Bearer " + token);
-	            https.setConnectTimeout(15000); 
-	            https.setReadTimeout(30000); 
-	            https.setDoInput(true);
+	    if (requestTimestamps.size() >= MAX_REQUESTS_PER_MINUTE) {
 
-	            int status = https.getResponseCode();
-	            StringBuilder responseContent = new StringBuilder();
-	            BufferedReader reader = (status >= 300)
-	                ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
-	                : new BufferedReader(new InputStreamReader(https.getInputStream()));
-
-	            String line;
-	            while ((line = reader.readLine()) != null) {
-	                responseContent.append(line);
-	            }
-	            reader.close();
-	            https.disconnect();
-
-	            LogCatcher.logInfo("Output from Server .... \n" + status);
-
-	            return new String[] { Integer.toString(status), responseContent.toString() };
-
-	        } catch (java.net.SocketException | javax.net.ssl.SSLHandshakeException e) {
-	            attempt++;
-	            LogCatcher.logError("Tentativa " + attempt + " falhou com erro de rede: " + e.getMessage());
-	            if (attempt < MAX_RETRIES) {
-	                long delay = INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, attempt - 1);
-	                LogCatcher.logInfo("Aguardando " + delay + "ms antes da próxima tentativa.");
-	                Thread.sleep(delay);
-	            } else {
-	                LogCatcher.logError("Número máximo de tentativas atingido. Desistindo.");
-	                throw e;
-	            }
-	        }
+	        long oldestRequestTime = requestTimestamps.peek();
+	        long waitTime = ONE_MINUTE_IN_MS - (currentTime - oldestRequestTime);
+	        
+	        System.out.println("Limite de 60 requisições por minuto atingido. " +
+	                           "Aguardando " + waitTime + "ms");
+	        
+	        LogCatcher.logInfo("Limite de 60 requisições por minuto atingido. " +
+                    "Aguardando " + waitTime + "ms");
+	        
+	        Thread.sleep(waitTime);
+	        
+	        requestTimestamps.removeIf(timestamp -> 
+	            currentTime - timestamp > ONE_MINUTE_IN_MS);
 	    }
 
-	    return new String[] { "500", "{\"message\":\"Falha na comunicação com o servidor após " + MAX_RETRIES + " tentativas.\"}" };
+	    requestTimestamps.offer(System.currentTimeMillis());
+
+	    BufferedReader reader;
+	    StringBuilder responseContent = new StringBuilder();
+	    String encodedUrl = ur.replace(" ", "%20");
+	    
+	    URL obj = new URL(encodedUrl);
+	    HttpURLConnection https = (HttpURLConnection)obj.openConnection();
+	    
+	    System.out.println("Entrou na API");
+	    System.out.println("URL: " + encodedUrl);
+	    System.out.println("Token Enviado: [" + token + "]");
+	    
+	    https.setRequestMethod("GET");
+	    https.setRequestProperty("User-Agent", 
+	        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+	    https.setRequestProperty("Content-Type", 
+	        "application/json; charset=UTF-8");
+	    https.setRequestProperty("Accept", "application/json");
+	    https.setRequestProperty("Authorization", "Bearer " + token);
+	    https.setDoInput(true);
+	    
+	    int status = https.getResponseCode();
+
+	    reader = (status >= 300) 
+	        ? new BufferedReader(new InputStreamReader(https.getErrorStream()))
+	        : new BufferedReader(new InputStreamReader(https.getInputStream()));
+	    
+	    String line;
+	    while ((line = reader.readLine()) != null)
+	        responseContent.append(line);
+	    
+	    reader.close();
+	    
+	    System.out.println("Output from Server .... \n" + status);
+	    LogCatcher.logInfo("Output from Server .... \n" + status);
+	    
+	    String response = responseContent.toString();
+	    https.disconnect();
+	    
+	    return new String[] { Integer.toString(status), response };
+	}
+
+	public void updateFin(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
+						  BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta, BigDecimal vlrOutrosAcrescimos,
+						  BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, ";
+			sqlNota = sqlNota + "AD_VLRDESCINT = " + vlrDesconto + ", ";
+			sqlNota = sqlNota + "VLRINSS = 0, VLRIRF = 0, VLRISS = 0, ";
+			sqlNota = sqlNota + "AD_VLRMULTAINT = " + vlrMulta + ", ";
+			sqlNota = sqlNota + "AD_VLRJUROSINT = " + vlrJuros + ", AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos;
+			sqlNota = sqlNota + ", TIPJURO = null, ";
+			sqlNota = sqlNota + "TIPMULTA = null";
+			sqlNota = sqlNota + " WHERE nufin = ?";
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			pstmt.setBigDecimal(1, codtiptit);
+			pstmt.setBigDecimal(2, codBanco);
+			pstmt.setBigDecimal(3, codConta);
+			pstmt.setBigDecimal(4, nufin);
+			pstmt.executeUpdate();
+			System.out.println("Passou do update");
+		} catch (SQLException e) {
+			e.printStackTrace();
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Financeiro Para baixa: "
+					+ e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			LogCatcher.logInfo("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Financeiro Para baixa: "
+					+ e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+
 	}
 
 
@@ -1147,7 +1577,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	    PreparedStatement stmt = null;
 
 	    try {
-	        LogCatcher.logInfo("Iniciando estorno para NUFIN: " + nufin + " - Empresa: " + codemp);
+	        LogCatcher.logInfo("\nIniciando estorno para NUFIN: " + nufin + " - Empresa: " + codemp);
 
 	        jdbc.openSession();
 
@@ -1158,22 +1588,17 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	        }
 
 	        BigDecimal nubco = finVO.asBigDecimal("NUBCO");
-	        BigDecimal vlrBaixa = finVO.asBigDecimal("VLRBAIXA");
-	        String isCartao = finVO.asString("AD_BAIXA_CARTAO");
+	        //BigDecimal vlrBaixa = finVO.asBigDecimal("VLRBAIXA");
+	        //String isCartao = finVO.asString("AD_BAIXA_CARTAO");
 
-	        if ((nubco == null || nubco.compareTo(BigDecimal.ZERO) == 0)
-	                && !"S".equalsIgnoreCase(isCartao)
-	                && (vlrBaixa == null || vlrBaixa.compareTo(BigDecimal.ZERO) > 0)) {
-
-	            String msg = "Movimento Bancário não encontrado para o título: " + nufin;
-	            LogCatcher.logInfo("[ALERTA] " + msg);
+	        if (nubco == null || nubco.compareTo(BigDecimal.ZERO) == 0) {
+	            String msg = "Movimento Bancário (NUBCO) não encontrado para o título: " + nufin + ". Estorno não pode ser realizado.";
+	            LogCatcher.logInfo("[AVISO] " + msg);
 
 	            this.selectsParaInsert.add("SELECT <#NUMUNICO#>, '" + msg.replace("'", "''")
 	                    + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
-
-	            LogCatcher.logInfo("SELECT <#NUMUNICO#>, '" + msg.replace("'", "''")
-	                    + "' , SYSDATE, 'Aviso', " + codemp + ", '' FROM DUAL");
 	            
+	            // Encerra a execução para este título, pois não há o que estornar no banco.
 	            return;
 	        }
 
@@ -1192,6 +1617,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	        LogCatcher.logInfo("Chamando estornarTitulo para NUFIN: " + nufin);
 
+	        // ⬇️ Inserção na tabela AD_ESTORNOINT ANTES de deletar
 	        String insertSql = "INSERT INTO ad_estornoint (titulo_id, status_estorno, descricao) VALUES (?, ?, ?)";
 	        stmt = jdbc.getConnection().prepareStatement(insertSql);
 	        stmt.setBigDecimal(1, nufin);
@@ -1201,6 +1627,9 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	        int inserted = stmt.executeUpdate();
 	        LogCatcher.logInfo("Registro inserido em ad_estornoint para NUFIN: " + nufin + " - Linhas inseridas: " + inserted);
 
+//	        deletarTitulo(nufin);
+//	        LogCatcher.logInfo("Título estornado e removido da TGFFIN com sucesso: " + nufin);
+//	        LogCatcher.logInfo("Título estornado com sucesso: " + nufin);
 
 	    } catch (Exception e) {
 	        LogCatcher.logInfo("[ERRO] Falha ao estornar título NUFIN: " + nufin + " - Erro: " + e.getMessage());
@@ -1217,6 +1646,8 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	        jdbc.closeSession();
 	    }
 	}
+
+
 
 
 	private DynamicVO getTituloVO(BigDecimal nufin) throws Exception {
@@ -1240,8 +1671,163 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		}
 	}
 
+//	private void deletarTitulo(BigDecimal nufin) throws Exception {
+//		JdbcWrapper jdbc = EntityFacadeFactory.getDWFFacade().getJdbcWrapper();
+//
+//		jdbc.openSession();
+//		String sql = "DELETE FROM TGFFIN WHERE NUFIN = ?";
+//
+//		try (PreparedStatement pstmt = jdbc.getPreparedStatement(sql)) {
+//			pstmt.setBigDecimal(1, nufin);
+//			pstmt.executeUpdate();
+//		}
+//	}
 
 
+
+
+	public void updateFinComVlrBaixa(BigDecimal codtiptit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
+									 BigDecimal vlrBaixa, BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta,
+									 BigDecimal vlrOutrosAcrescimos, String baixaId, BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, AD_VLRDESCINT = "
+					+ vlrDesconto + ", " + "VLRINSS = 0, " + "VLRIRF = 0, " + "VLRISS = 0, " + "AD_VLRJUROSINT = "
+					+ vlrJuros + ", " + "AD_VLRMULTAINT = " + vlrMulta + ", "
+					+ "TIPJURO = null, AD_VLRORIG = VLRDESDOB, " + "VLRDESDOB = " + vlrBaixa + ", "
+					+ "TIPMULTA = null, AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos + ", AD_BAIXAID = " + baixaId
+					+ " WHERE nufin = ?";
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			pstmt.setBigDecimal(1, codtiptit);
+			pstmt.setBigDecimal(2, codBanco);
+			pstmt.setBigDecimal(3, codConta);
+			pstmt.setBigDecimal(4, nufin);
+			pstmt.executeUpdate();
+			System.out.println("Passou do update");
+		} catch (SQLException e) {
+			e.printStackTrace();
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa: " + e.getMessage().replace("'", "''") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa: " + e.getMessage().replace("'", "''") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+
+	}
+
+
+	public void updateFinCartao(BigDecimal codTipTit, BigDecimal nufin, BigDecimal codBanco, BigDecimal codConta,
+								BigDecimal vlrBaixa, BigDecimal vlrDesconto, BigDecimal vlrJuros, BigDecimal vlrMulta,
+								BigDecimal vlrOutrosAcrescimos, String baixaId, BigDecimal codemp,
+								BigDecimal codParc, String dtCredito, String nsu_Cartao, String autorizacao) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlNota = "UPDATE TGFFIN SET CODTIPTIT = ?, CODBCO = ?, CODCTABCOINT = ?, AD_VLRDESCINT = " + vlrDesconto + ", " + "VLRINSS = 0, " + "VLRIRF = 0, " + "VLRISS = 0, " + "AD_VLRJUROSINT = " + vlrJuros + ", " + "AD_VLRMULTAINT = " + vlrMulta + ", " + "TIPJURO = null, AD_VLRORIG = VLRDESDOB, " + "VLRDESDOB = " + vlrBaixa + ", " + "TIPMULTA = null, AD_OUTACRESCIMOS = " + vlrOutrosAcrescimos + ", " + "AD_BAIXAID = " + baixaId + ", CODPARC = " + codParc + ", " + "AD_BAIXA_CARTAO = 'S', DTVENC = TO_DATE('" + dtCredito + "', 'YYYY-MM-DD')," + "AD_NSU_CART = '" + nsu_Cartao + "', AD_AUTORIZACAO_CART = '" + autorizacao + "' WHERE nufin = ?";
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			pstmt.setBigDecimal(1, codTipTit); // Corrigido de codtiptit para codTipTit
+			pstmt.setBigDecimal(2, codBanco);
+			pstmt.setBigDecimal(3, codConta);
+			pstmt.setBigDecimal(4, nufin);
+			pstmt.executeUpdate();
+			System.out.println("Passou do update");
+		} catch (SQLException e) {
+			e.printStackTrace();
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa de Cartão: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Atualizar Titulo Para Baixa de Cartão: " + e.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+	}
+
+
+	public void updateBaixa(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada,
+							String baixaId, BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+
+			String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = " + vlrDesdob + ", " + "DHBAIXA = '" + dataBaixaFormatada
+					+ "', " + "NUBCO = " + nubco + ", " + "CODTIPOPERBAIXA = 1400, "
+					+ "DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), "
+					+ "CODUSUBAIXA = 0, AD_BAIXAID = " + baixaId + " " + "WHERE NUFIN = " + nufin;
+
+			LogCatcher.logInfo("[UPDATE TGFFIN] Executando atualização da baixa - NUFIN: " + nufin + ", NUBCO: " + nubco
+					+ ", VLRBAIXA: " + vlrDesdob + ", DHBAIXA: " + dataBaixaFormatada + ", AD_BAIXAID: " + baixaId
+					+ ", Empresa: " + codemp);
+			LogCatcher.logInfo("[SQL EXECUTADO] " + sqlNota);
+
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			int linhasAfetadas = pstmt.executeUpdate();
+
+			LogCatcher.logInfo("[UPDATE TGFFIN] Linhas afetadas: " + linhasAfetadas);
+			System.out.println("Passou do update");
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			String msgErro = "Erro Ao Baixar Titulo: " + e.getMessage();
+			LogCatcher
+					.logError("SELECT <#NUMUNICO#>, '" + msgErro + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert
+					.add("SELECT <#NUMUNICO#>, '" + msgErro + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+	}
+
+
+	public void updateBaixaParcial(BigDecimal nufin, BigDecimal nubco, BigDecimal vlrDesdob, String dataBaixaFormatada,
+								   BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlNota = "UPDATE TGFFIN SET VLRBAIXA = " + vlrDesdob + ", " + "DHBAIXA = '" + dataBaixaFormatada
+					+ "', " + "NUBCO = " + nubco + ", " + "CODTIPOPERBAIXA = 1400, "
+					+ "DHTIPOPERBAIXA = (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), "
+					+ "CODUSUBAIXA = 0, AD_BAIXAPARCIAL = 'S'  " + "WHERE NUFIN = " + nufin;
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			pstmt.executeUpdate();
+			System.out.println("Passou do update");
+		} catch (SQLException e) {
+			e.printStackTrace();
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Parcialmente Um Titulo: " + e.getMessage()
+					+ "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Baixar Parcialmente Um Titulo: " + e.getMessage()
+					+ "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+
+	}
 
 	public void insertLogIntegracao(String descricao, String status) throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1270,7 +1856,106 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	}
 
+	public BigDecimal insertMovBancaria(BigDecimal contaBancaria, BigDecimal vlrDesdob, BigDecimal nufin,
+										String dataBaixaFormatada, BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+		EnviromentUtils util = new EnviromentUtils();
+		BigDecimal nubco = util.getMaxNumMbc();
+		LogCatcher.logInfo("Gerado NUBCO: " + nubco + " | Conta bancária: " + contaBancaria + " | Empresa: " + codemp);
 
+		try {
+			jdbc.openSession();
+			String sqlUpdate = "INSERT INTO TGFMBC (NUBCO, CODLANC, DTLANC, CODTIPOPER, DHTIPOPER, DTCONTAB, HISTORICO, CODCTABCOINT, NUMDOC, VLRLANC, TALAO, PREDATA, CONCILIADO, DHCONCILIACAO, ORIGMOV, NUMTRANSF, RECDESP, DTALTER, DTINCLUSAO, CODUSU, VLRMOEDA, SALDO, CODCTABCOCONTRA, NUBCOCP, CODPDV)  VALUES ("
+					+ nubco + ", " + "1, " + "'" + dataBaixaFormatada + "'" + ", " + "1400, "
+					+ "(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 1400), " + "NULL, "
+					+ "(SELECT HISTORICO FROM TGFFIN WHERE NUFIN = " + nufin + "), " + contaBancaria + ", " + "0, "
+					+ vlrDesdob + ", " + "NULL, " + "'" + dataBaixaFormatada + "', " + "'N', " + "NULL, " + "'F', "
+					+ "NULL, " + "1, " + "SYSDATE, " + "SYSDATE, " + "0, " + "0, " + vlrDesdob + ", " + "NULL,  "
+					+ "NULL, " + "NULL) ";
+			pstmt = jdbc.getPreparedStatement(sqlUpdate);
+			pstmt.executeUpdate();
+			LogCatcher.logInfo("Inserido NUBCO: " + nubco + " na TGFMBC para NUFIN: " + nufin + " | Conta: " + contaBancaria + " | Empresa: " + codemp);
+
+		} catch (Exception se) {
+			se.printStackTrace();
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Inserir Mov. Bancaria: "
+					+ se.getMessage().replace("'", "\"") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Inserir Mov. Bancaria: "
+					+ se.getMessage().replace("'", "\"") + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			if (jdbc != null) {
+				jdbc.closeSession();
+			}
+
+		}
+
+		return nubco;
+	}
+
+	public BigDecimal getMaxNumMbc() throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+		ResultSet rs = null;
+		BigDecimal id = BigDecimal.ZERO;
+
+		try {
+			this.updateNumMbc();
+			jdbc.openSession();
+			String sqlNota = "SELECT MAX(ULTCOD) AS ULTCOD FROM TGFNUM WHERE ARQUIVO = 'TGFMBC'";
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			rs = pstmt.executeQuery();
+			if (rs.next()) {
+				id = rs.getBigDecimal("ULTCOD");
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (rs != null) {
+				rs.close();
+			}
+
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+
+		return id;
+	}
+
+	public void updateNumMbc() throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlUpdate = "UPDATE TGFNUM SET ULTCOD = NVL(ULTCOD, 0) + 1  WHERE ARQUIVO = 'TGFMBC'";
+			pstmt = jdbc.getPreparedStatement(sqlUpdate);
+			pstmt.executeUpdate();
+		} catch (Exception se) {
+			se.printStackTrace();
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			if (jdbc != null) {
+				jdbc.closeSession();
+			}
+
+		}
+
+	}
 
 	public void updateFlagAlunoIntegrado(String idAluno) throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1303,7 +1988,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 		PreparedStatement pstmt = null;
 
 		try {
-			LogCatcher.logInfo("Entrou no updateResetarAlunos da flag dos alunos baixa");
+			System.out.println("Entrou no UPDATE da flag dos alunos baixa");
 			jdbc.openSession();
 			String sqlUpdate = "UPDATE AD_ALUNOS SET INTEGRADO_BAIXA = 'N'";
 			pstmt = jdbc.getPreparedStatement(sqlUpdate);
@@ -1329,7 +2014,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			long tempoAgora = System.currentTimeMillis();
 			long diffInSeconds = tempoAgora - tempoAnterior;
 			tempoAnterior = tempoAgora;
-			LogCatcher.logInfo(msgRetornoLog + " : " + diffInSeconds);
+			System.out.println(msgRetornoLog + " : " + diffInSeconds);
 		}
 
 		return tempoAnterior;
@@ -1536,6 +2221,148 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 
+	public BigDecimal insertFin(BigDecimal nufinOrig, BigDecimal vlrDesdob, BigDecimal codTipTit, BigDecimal codemp) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+		EnviromentUtils util = new EnviromentUtils();
+		System.out.println("Chegou no insert do financeiro segundo");
+		BigDecimal nufin = util.getMaxNumFin(true);
+
+		try {
+			jdbc.openSession();
+			String sqlUpdate = "INSERT INTO TGFFIN         (NUFIN,          NUNOTA,          NUMNOTA,          ORIGEM,          RECDESP,          CODEMP,          CODCENCUS,          CODNAT,          CODTIPOPER,          DHTIPOPER,          CODTIPOPERBAIXA,          DHTIPOPERBAIXA,          CODPARC,          CODTIPTIT,          VLRDESDOB,          VLRDESC,          VLRBAIXA,          CODBCO,          CODCTABCOINT,          DTNEG,          DHMOV,          DTALTER,          DTVENC,          DTPRAZO,          DTVENCINIC,          TIPJURO,          TIPMULTA,          HISTORICO,          TIPMARCCHEQ,          AUTORIZADO,          BLOQVAR,          INSSRETIDO,          ISSRETIDO,          PROVISAO,          RATEADO,          TIMBLOQUEADA,          IRFRETIDO,          TIMTXADMGERALU,          VLRDESCEMBUT,          VLRINSS,          VLRIRF,          VLRISS,          VLRJURO,          VLRJUROEMBUT,          VLRJUROLIB,          VLRJURONEGOC,          VLRMOEDA,          VLRMOEDABAIXA,          VLRMULTA,          VLRMULTAEMBUT,          VLRMULTALIB,          VLRMULTANEGOC,          VLRPROV,          VLRVARCAMBIAL,          VLRVENDOR,          ALIQICMS,          BASEICMS,          CARTAODESC,          CODMOEDA,          CODPROJ,          CODVEICULO,          CODVEND,          DESPCART,          NUMCONTRATO,          ORDEMCARGA,          CODUSU,         AD_IDEXTERNO,         AD_IDALUNO, AD_NUFINORIG, AD_BAIXAPARCIAL)          (SELECT " + nufin + ", NULL, 0, 'F', recDesp ,codemp ,codCenCus ,codNat ,codTipOper ,(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = TGFFIN.codTipOper), 0, (SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), codparc ," + codTipTit + ", " + vlrDesdob + ", 0, 0, CODBCO, CODCTABCOINT, DTNEG , SYSDATE, SYSDATE, DTVENC , SYSDATE, DTVENCINIC , 1 , 1 , null , 'I' , 'N' , 'N' , 'N' , 'N' , 'N' , 'N' , 'N' , 'S' , 'S' , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, AD_IDALUNO, " + nufinOrig + ", 'S' FROM TGFFIN WHERE NUFIN = " + nufinOrig + ")";
+			pstmt = jdbc.getPreparedStatement(sqlUpdate);
+			pstmt.executeUpdate();
+		} catch (Exception se) {
+			se.printStackTrace();
+
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() + "' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			try {
+				if (pstmt != null) {
+					pstmt.close();
+				}
+
+				if (jdbc != null) {
+					jdbc.closeSession();
+				}
+			} catch (Exception se) {
+				se.printStackTrace();
+			}
+
+		}
+
+		return nufin;
+	}
+
+
+
+	public BigDecimal insertFinCartao(BigDecimal nufinOrig, BigDecimal vlrDesdob, BigDecimal codTipTit, BigDecimal codemp,
+									  BigDecimal codParc, String dtCredito, String baixaId) throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+		EnviromentUtils util = new EnviromentUtils();
+		System.out.println("Chegou no insert do financeiro cartão");
+		LogCatcher.logInfo("Chegou no insert do financeiro cartão");
+		BigDecimal nufinNovo = util.getMaxNumFin(true); // Alterado o nome da variável para evitar conflito
+
+		try {
+			jdbc.openSession();
+			String sqlUpdate = "INSERT INTO TGFFIN (NUFIN, NUNOTA, NUMNOTA, ORIGEM, RECDESP, CODEMP, CODCENCUS, CODNAT, CODTIPOPER, DHTIPOPER, CODTIPOPERBAIXA, DHTIPOPERBAIXA, CODPARC, CODTIPTIT, VLRDESDOB, VLRDESC, VLRBAIXA, CODBCO, CODCTABCOINT, DTNEG, DHMOV, DTALTER, DTVENC, DTPRAZO, DTVENCINIC, TIPJURO, TIPMULTA, HISTORICO, TIPMARCCHEQ, AUTORIZADO, BLOQVAR, INSSRETIDO, ISSRETIDO, PROVISAO, RATEADO, TIMBLOQUEADA, IRFRETIDO, TIMTXADMGERALU, VLRDESCEMBUT, VLRINSS, VLRIRF, VLRISS, VLRJURO, VLRJUROEMBUT, VLRJUROLIB, VLRJURONEGOC, VLRMOEDA, VLRMOEDABAIXA, VLRMULTA, VLRMULTAEMBUT, VLRMULTALIB, VLRMULTANEGOC, VLRPROV, VLRVARCAMBIAL, VLRVENDOR, ALIQICMS, BASEICMS, CARTAODESC, CODMOEDA, CODPROJ, CODVEICULO, CODVEND, DESPCART, NUMCONTRATO, ORDEMCARGA, CODUSU, AD_IDEXTERNO, AD_IDALUNO, AD_NUFINORIG, AD_BAIXAPARCIAL, AD_BAIXA_CARTAO, AD_BAIXAID, AD_AUTORIZACAO_CART, AD_NSU_CART) " +
+					"(SELECT " + nufinNovo + ", NULL, 0, 'F', recDesp, codemp, codCenCus, codNat, codTipOper, " +
+					"(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = TGFFIN.codTipOper), 0, " +
+					"(SELECT MAX(DHALTER) FROM TGFTOP WHERE CODTIPOPER = 0), " + codParc + ", " + // Substituído codparc por codParc
+					codTipTit + ", " + vlrDesdob + ", 0, 0, CODBCO, CODCTABCOINT, DTNEG, SYSDATE, SYSDATE, TO_DATE('" +
+					dtCredito + "', 'YYYY-MM-DD'), SYSDATE, DTVENCINIC, 1, 1, null, 'I', 'N', 'N', 'N', 'N', 'N', 'N', 'N', " +
+					"'S', 'S', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, AD_IDALUNO, " +
+					nufinOrig + ", 'S', 'S', '" + baixaId + "', AD_AUTORIZACAO_CART, AD_NSU_CART FROM TGFFIN WHERE NUFIN = " + nufinOrig + ")";
+			pstmt = jdbc.getPreparedStatement(sqlUpdate);
+			pstmt.executeUpdate();
+		} catch (Exception se) {
+			se.printStackTrace();
+			LogCatcher.logError("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() +
+					"' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+			this.selectsParaInsert.add("SELECT <#NUMUNICO#>, 'Erro Ao Gerar Titulo Parcial: " + se.getMessage() +
+					"' , SYSDATE, 'Erro', " + codemp + ", '' FROM DUAL");
+		} finally {
+			try {
+				if (pstmt != null) {
+					pstmt.close();
+				}
+
+				if (jdbc != null) {
+					jdbc.closeSession();
+				}
+			} catch (Exception se) {
+				se.printStackTrace();
+			}
+		}
+
+		return nufinNovo;
+	}
+
+
+	public BigDecimal getMaxNumFin() throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+		ResultSet rs = null;
+		BigDecimal id = BigDecimal.ZERO;
+
+		try {
+			this.updateNumFin();
+			jdbc.openSession();
+			String sqlNota = "SELECT MAX(ULTCOD) AS ULTCOD FROM TGFNUM WHERE ARQUIVO = 'TGFFIN'";
+			pstmt = jdbc.getPreparedStatement(sqlNota);
+			rs = pstmt.executeQuery();
+			if (rs.next()) {
+				id = rs.getBigDecimal("ULTCOD");
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw e;
+		} finally {
+			if (rs != null) {
+				rs.close();
+			}
+
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			jdbc.closeSession();
+		}
+
+		return id;
+	}
+
+	public void updateNumFin() throws Exception {
+		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
+		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
+		PreparedStatement pstmt = null;
+
+		try {
+			jdbc.openSession();
+			String sqlUpdate = "UPDATE TGFNUM SET ULTCOD = NVL(ULTCOD, 0) + 1  WHERE ARQUIVO = 'TGFFIN'";
+			pstmt = jdbc.getPreparedStatement(sqlUpdate);
+			pstmt.executeUpdate();
+		} catch (Exception se) {
+			se.printStackTrace();
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+
+			if (jdbc != null) {
+				jdbc.closeSession();
+			}
+
+		}
+
+	}
 
 	public List<Object[]> retornarInformacoesIdBaixa() throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1578,6 +2405,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 	}
 
 
+	//retornarInformacoesContagemIdBaixa com ALIAS corrigido
 	public List<Object[]> retornarInformacoesContagemIdBaixa() throws Exception {
 		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
 		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
@@ -1587,6 +2415,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 		try {
 			jdbc.openSession();
+			// CORREÇÃO: Adicionado alias para AD_BAIXAID
 			String sql = "\tSELECT COUNT(0) AS C, CODEMP, AD_BAIXAID AS BAIXAID FROM TGFFIN WHERE RECDESP = 1 AND PROVISAO = 'N' AND DHBAIXA IS NOT NULL AND AD_IDALUNO IS NOT NULL GROUP BY CODEMP, AD_BAIXAID";
 			pstmt = jdbc.getPreparedStatement(sql);
 			rs = pstmt.executeQuery();
@@ -1594,7 +2423,7 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 			while (rs.next()) {
 				Object[] ret = new Object[3];
 				ret[0] = rs.getBigDecimal("CODEMP");
-				ret[1] = rs.getString("BAIXAID"); 
+				ret[1] = rs.getString("BAIXAID"); // Agora usando o alias correto
 				ret[2] = rs.getBigDecimal("C");
 				listRet.add(ret);
 			}
@@ -1701,5 +2530,3 @@ public class AcaoGetBaixaMapCarga implements AcaoRotinaJava, ScheduledAction {
 
 	}
 }
-
-

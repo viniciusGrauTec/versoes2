@@ -3,6 +3,11 @@ package br.com.sankhya.acoesgrautec.extensions;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
+
+import com.ibm.icu.text.NumberFormat;
+
+import br.com.sankhya.jape.core.JapeSession;
 import br.com.sankhya.jape.vo.DynamicVO;
 import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper.BaixaHelperEvent;
 import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper.BaixaHelperListenerAdapter;
@@ -10,7 +15,8 @@ import br.com.sankhya.modelcore.util.SWRepositoryUtils;
 
 
 public class AcompanhamentoBaixaListener extends BaixaHelperListenerAdapter {
-
+	 private final SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+	 private final NumberFormat nf = NumberFormat.getCurrencyInstance(new Locale("pt", "BR"));
 	static {
 		LogConfiguration.setPath(SWRepositoryUtils.getBaseFolder() + "/logAcao/logs");
 	}
@@ -44,26 +50,26 @@ public class AcompanhamentoBaixaListener extends BaixaHelperListenerAdapter {
     @Override
     public void beforeBaixa(BaixaHelperEvent event) throws Exception {
         DynamicVO finVO = event.getFinVO();
-        BigDecimal nufin = finVO.asBigDecimalOrZero("NUFIN");
-        
-        if (nufin.compareTo(BigDecimal.ZERO) == 0) {
-             LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] => INICIANDO baixa para um novo título (forma de pgto) com CODTIPTIT: %s", finVO.asBigDecimalOrZero("CODTIPTIT")));
-        } else {
-             LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] => INICIANDO baixa para o NUFIN: %s", nufin));
-        }
-        
-        LogCatcher.logInfo("     " + formatarDetalhesFinanceiro(finVO));
+        String detalhes = montarDetalhes(finVO);
+        LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] => INICIANDO baixa para o NUFIN: %s", finVO.asBigDecimal("NUFIN")));
+        LogCatcher.logInfo(detalhes);
     }
 
     @Override
     public void afterBaixa(BaixaHelperEvent event) throws Exception {
         DynamicVO finVO = event.getFinVO();
-        BigDecimal nufin = finVO.asBigDecimalOrZero("NUFIN");
-        BigDecimal nuBco = finVO.asBigDecimalOrZero("NUBCO");
-
-        LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] <= SUCESSO na baixa do NUFIN: %s. Mov. Bancário NUBCO: %s", nufin, nuBco));
+        BigDecimal nufin = finVO.asBigDecimal("NUFIN");
+        BigDecimal nufinOriginal = (BigDecimal) JapeSession.getProperty("NUFIN_ORIGINAL_BAIXA");
         
-        LogCatcher.logInfo("     " + formatarDetalhesFinanceiro(finVO));
+        String tipoOperacao = (nufinOriginal != null && nufin.equals(nufinOriginal)) 
+            ? "ATUALIZAÇÃO do título original" 
+            : "CRIAÇÃO de nova parcela";
+
+        LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] <= SUCESSO na %s NUFIN: %s. Mov. Bancário NUBCO: %s", 
+            tipoOperacao, nufin, finVO.asBigDecimalOrZero("NUBCO")));
+            
+        String detalhes = montarDetalhes(finVO);
+        LogCatcher.logInfo(detalhes);
     }
 
     @Override
@@ -86,5 +92,21 @@ public class AcompanhamentoBaixaListener extends BaixaHelperListenerAdapter {
         LogCatcher.logInfo(String.format("[ACOMPANHAMENTO-BAIXA] ## CRÉDITO GERADO com NUFIN %s no valor de R$ %.2f.", nufinCredito, vlrCredito));
   
         LogCatcher.logInfo("     " + formatarDetalhesFinanceiro(creditoVO));
+    }
+    
+    private String montarDetalhes(DynamicVO finVO) {
+        String nomeParc = finVO.asString("Parceiro.NOMEPARC");
+        BigDecimal codParc = finVO.asBigDecimal("CODPARC");
+        String vencimento = finVO.asTimestamp("DTVENC") != null ? sdf.format(finVO.asTimestamp("DTVENC")) : "N/A";
+        
+        return String.format("       [DETALHES]: Parc: %s-%s | Venc: %s | Valor Baixado: %s | Juros: %s | Multa: %s | Desconto: %s",
+            codParc,
+            nomeParc,
+            vencimento,
+            nf.format(finVO.asBigDecimalOrZero("VLRBAIXA")),
+            nf.format(finVO.asBigDecimalOrZero("VLRJURO")),
+            nf.format(finVO.asBigDecimalOrZero("VLRMULTA")),
+            nf.format(finVO.asBigDecimalOrZero("VLRDESC"))
+        );
     }
 }

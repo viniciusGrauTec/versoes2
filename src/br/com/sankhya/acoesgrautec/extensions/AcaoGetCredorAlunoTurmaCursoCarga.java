@@ -62,14 +62,12 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	       Registro[] linhas = contexto.getLinhas();
 
 	       if (linhas.length < 1) {
-	           System.out.println("Ação cancelada: Nenhuma linha selecionada");
 	           LogCatcher.logError("Ação interrompida: Nenhuma linha selecionada.");
 	           contexto.mostraErro("É necessário selecionar pelo menos 1 linha.");
 	           return;
 	       }
 
 	       int linhasParaProcessar = Math.min(linhas.length, 65);
-	       System.out.println("Processando " + linhasParaProcessar + " registro(s)");
 	       LogCatcher.logInfo("Processando " + linhasParaProcessar + " registro(s)");
 
 	       EntityFacade entityFacade = null;
@@ -80,10 +78,8 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	           jdbc = entityFacade.getJdbcWrapper();
 	           jdbc.openSession();
 
-	           System.out.println("Sessão JDBC aberta");
 	           LogCatcher.logInfo("Sessão JDBC aberta com sucesso.");
 
-	           System.out.println("Carregando informações de alunos...");
 	           LogCatcher.logInfo("Carregando informações de alunos...");
 
 	           Map<String, BigDecimal> mapaInfAlunos = retornarInformacoesAlunos().stream()
@@ -97,7 +93,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	                   },
 	                   HashMap::putAll);
 
-	           System.out.println("Carregando informações de parceiros...");
 	           LogCatcher.logInfo("Carregando informações de parceiros...");
 
 	           Map<String, BigDecimal> mapaInfParceiros = retornarInformacoesParceiros().stream()
@@ -113,7 +108,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	           String dataFim = contexto.getParam("DTFIM").toString().substring(0, 10);
 	           String matricula = (String) contexto.getParam("Matricula");
 
-	           System.out.println("Processando período de " + dataInicio + " até " + dataFim + " para matrícula: " + matricula);
+
 	           LogCatcher.logInfo("Processando período de " + dataInicio + " até " + dataFim + " para matrícula: " + matricula);
 
 	           for (int i = 0; i < linhasParaProcessar; i++) {
@@ -123,18 +118,18 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	               String token = (String) registro.getCampo("TOKEN");
 	               BigDecimal codEmp = (BigDecimal) registro.getCampo("CODEMP");
 
-	               System.out.println("Processando registro " + (i + 1) + " de " + linhasParaProcessar + " - Empresa: " + codEmp);
+
 	               LogCatcher.logInfo("Processando registro " + (i + 1) + " de " + linhasParaProcessar + " - Empresa: " + codEmp);
 
 	               processDateRangeByMonths(mapaInfAlunos, mapaInfParceiros, url, token, codEmp, dataInicio, dataFim, matricula);
 	           }
 
 	           contexto.setMensagemRetorno("Período processado com sucesso para " + linhasParaProcessar + " registro(s)!");
-	           System.out.println("Finalizou o processamento do período");
+
 	           LogCatcher.logInfo("Finalizou o processamento do período");
 
 	       } catch (Exception e) {
-	           System.out.println("Erro na ação - Thread: " + threadName);
+
 	           e.printStackTrace();
 
 	           LogCatcher.logError("Erro na execução da ação - Thread: " + threadName + " - Erro: " + e.getMessage());
@@ -156,14 +151,12 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	       } finally {
 	           if (jdbc != null) {
 	               jdbc.closeSession();
-	               System.out.println("Sessão JDBC encerrada");
 	               LogCatcher.logInfo("Sessão JDBC encerrada.");
 	           }
 
 	           processarLogsPendentes();
 
 	           Date endTime = new Date();
-	           System.out.println("=== FIM DO BOTÃO DE AÇÃO === Thread: " + threadName + " - Hora: " + endTime);
 	           LogCatcher.logInfo("\n=== FIM DO BOTÃO DE AÇÃO === Thread: " + threadName + " - Hora: " + endTime);
 	       }
 	   }
@@ -180,10 +173,8 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	       String threadName = Thread.currentThread().getName();
 	       Date startTime = new Date();
 
-	       System.out.println("=== INÍCIO DO JOB === Thread: " + threadName + " - Hora: " + startTime);
 	       LogCatcher.logInfo("\n=== INÍCIO DO JOB DE CADASTRO DE ALUNO === Thread: " + threadName + " - Hora: " + startTime);
 
-	       System.out.println("Iniciou cadastro dos alunos");
 	       LogCatcher.logInfo("Iniciou cadastro dos alunos");
 
 	       EntityFacade entityFacade = null;
@@ -194,7 +185,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	           jdbc = entityFacade.getJdbcWrapper();
 	           jdbc.openSession();
 
-	           System.out.println("Iniciando carregamento de informações - Thread: " + threadName);
+
 	           LogCatcher.logInfo("Iniciando carregamento de informações - Thread: " + threadName);
 
 	           Map<String, BigDecimal> mapaInfAlunos = retornarInformacoesAlunos().stream()
@@ -217,16 +208,13 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	                   },
 	                   HashMap::putAll);
 
-	           System.out.println("Iniciando processamento das empresas - Thread: " + threadName);
 	           LogCatcher.logInfo("Iniciando processamento das empresas - Thread: " + threadName);
 
 	           processarEmpresas(jdbc, mapaInfAlunos, mapaInfParceiros, threadName);
 
-	           System.out.println("Finalizou o cadastro dos alunos");
 	           LogCatcher.logInfo("Finalizou o cadastro dos alunos");
 
 	       } catch (Exception e) {
-	           System.out.println("Erro no job - Thread: " + threadName);
 	           e.printStackTrace();
 	           LogCatcher.logError("Erro na execução do job - Thread: " + threadName + " - Erro: " + e.getMessage());
 	           LogCatcher.logError(e);
@@ -243,14 +231,12 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	       } finally {
 	           if (jdbc != null) {
 	               jdbc.closeSession();
-	               System.out.println("Sessão JDBC encerrada");
 	               LogCatcher.logInfo("Sessão JDBC encerrada");
 	           }
 
 	           processarLogsPendentes();
 
 	           Date endTime = new Date();
-	           System.out.println("=== FIM DO JOB === Thread: " + threadName + " - Hora: " + endTime);
 	           LogCatcher.logInfo("\n=== FIM DO JOB DO CADASTRO DE ALUNO=== Thread: " + threadName + " - Hora: " + endTime);
 	       }
 	   }
@@ -264,7 +250,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 			try (PreparedStatement pstmt = jdbc.getPreparedStatement(queryEmp); ResultSet rs = pstmt.executeQuery()) {
 
 				while (rs.next()) {
-					System.out.println("While principal");
+					LogCatcher.logInfo("While principal");
 					LogCatcher.logInfo("\nIniciando iteração no while principal de empresas do cadastro de aluno");
 
 					BigDecimal codEmp = rs.getBigDecimal("CODEMP");
@@ -273,19 +259,15 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 					String statusIntegracao = rs.getString("INTEGRACAO");
 
 					if (!"S".equals(statusIntegracao)) {
-						System.out
-								.println("Integração desativada para a empresa " + codEmp + " - pulando processamento");
 						LogCatcher
 								.logInfo("Integração desativada para a empresa " + codEmp + " - pulando processamento");
 						continue;
 					}
 
-					System.out.println("Processando empresa " + codEmp + " na thread " + threadName);
 					LogCatcher.logInfo("Processando empresa " + codEmp + " na thread " + threadName);
 
 					iterarEndpoint(mapaInfAlunos, mapaInfParceiros, url, token, codEmp);
 
-					System.out.println("Finalizou processamento da empresa " + codEmp + " na thread " + threadName);
 					LogCatcher.logInfo("\nFinalizou processamento da empresa do cadastro de Aluno " + codEmp + " na thread " + threadName);
 				}
 			}
@@ -400,8 +382,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	    try {
 	        jdbc.openSession();
 	        String sql = "SELECT CODPARC, ID_EXTERNO, CODEMP FROM AD_ALUNOS";
-	        
-	        System.out.println("Executando query: " + sql);
+
 	        LogCatcher.logInfo("Executando consulta de alunos: " + sql);
 
 	        pstmt = jdbc.getPreparedStatement(sql);
@@ -457,7 +438,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        }
 
 	        String periodoTexto = "Processando período: " + periodoInicio + " até " + periodoFim;
-	        System.out.println(periodoTexto);
 	        LogCatcher.logInfo(periodoTexto);
 
 	        try {
@@ -469,7 +449,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	                                  " até " + periodoFim.format(formatter) + ". Erro: " + e.getMessage();
 
 	            insertLogIntegracao(mensagemErro, "ERRO", "", "");
-	            System.err.println(mensagemErro);
 	            e.printStackTrace();
 	            LogCatcher.logError(mensagemErro);
 	            LogCatcher.logError(e);
@@ -522,18 +501,16 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	            }
 
 	            String urlCompleta = urlBuilder.toString();
-	            System.out.println("URL para alunos (página " + pagina + "): " + urlCompleta);
 	            LogCatcher.logInfo("URL para alunos (página " + pagina + "): " + urlCompleta);
 
-	            String[] response = apiGet2(urlCompleta, token);
+	            String[] response = apiGet(urlCompleta, token);
 	            int status = Integer.parseInt(response[0]);
 
 	            if (status == 200) {
 	                JSONArray paginaAtual = new JSONArray(response[1]);
 
 	                if (paginaAtual.length() == 0) {
-	                    temMaisRegistros = false;
-	                    System.out.println("Página " + pagina + " vazia. Finalizando coleta de dados.");
+	                    temMaisRegistros = false;	                    
 	                    LogCatcher.logInfo("Página " + pagina + " vazia. Finalizando coleta de dados.");
 	                } else {
 	                    for (int i = 0; i < paginaAtual.length(); i++) {
@@ -542,21 +519,17 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 
 	                    if (paginaAtual.length() < 100) {
 	                        temMaisRegistros = false;
-	                        System.out.println("Última página encontrada com " + paginaAtual.length() + " registros.");
 	                        LogCatcher.logInfo("Última página encontrada com " + paginaAtual.length() + " registros.");
 	                    } else {
 	                        pagina++;
-	                        System.out.println("Página " + (pagina - 1) + " completa com 100 registros. Avançando para página " + pagina);
-	                        LogCatcher.logInfo("Página " + (pagina - 1) + " completa. Avançando para página " + pagina);
+	                        LogCatcher.logInfo("Página " + (pagina - 1) + " completa com 100 registros. Avançando para página " + pagina);
 	                    }
 
-	                    System.out.println("Página " + (pagina - 1) + ": " + paginaAtual.length() +
+	                    LogCatcher.logInfo("Página " + (pagina - 1) + ": " + paginaAtual.length() +
 	                            " registros. Total acumulado: " + todosRegistros.length());
-	                    LogCatcher.logInfo("Total acumulado até agora: " + todosRegistros.length());
 	                }
 	            } else if (status == 404) {
 	                temMaisRegistros = false;
-	                System.out.println("Página " + pagina + " não encontrada (404). Finalizando.");
 	                LogCatcher.logInfo("Página " + pagina + " não encontrada (404). Finalizando.");
 	            } else {
 	                String erro = String.format("Erro na requisição. Status: %d. Resposta: %s. URL: %s", status, response[1], urlCompleta);
@@ -566,19 +539,16 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        }
 
 	        if (todosRegistros.length() == 0) {
-	            System.out.println("Nenhum registro de aluno encontrado.");
 	            LogCatcher.logInfo("Nenhum registro de aluno encontrado.");
 	            return;
 	        }
 
-	        System.out.println("Total de registros acumulados: " + todosRegistros.length());
 	        LogCatcher.logInfo("\nTotal final de registros acumulados de Alunos: " + todosRegistros.length());
 
 	        cadastrarCredorAlunoCursoTurma(mapaInfAlunos, mapaInfParceiros, todosRegistros.toString(), codEmp);
 
 	    } catch (Exception e) {
 	        String erro = "Erro ao processar período " + dataInicio + " até " + dataFim + ": " + e.getMessage();
-	        System.err.println(erro);
 	        e.printStackTrace();
 	        LogCatcher.logError(erro);
 	        LogCatcher.logError(e);
@@ -602,7 +572,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        String urlFinal = url + "/alunos" + "?dataInicial=" + dataFormatada + " 00:00:00&dataFinal=" +
 	                dataFormatada + " 23:59:59&quantidade=0";
 
-	        String[] response = apiGet2(urlFinal, token);
+	        String[] response = apiGet(urlFinal, token);
 
 	        int status = Integer.parseInt(response[0]);
 	        String responseString = response[1];
@@ -698,7 +668,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        String dadosCombinados,
 	        BigDecimal codEmp) {
 
-	    System.out.println("Cadastro principal iniciado");
 	    LogCatcher.logInfo("\nIniciando cadastro de credor/aluno para CODEMP: " + codEmp);
 
 	    EnviromentUtils util = new EnviromentUtils();
@@ -750,7 +719,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	            // Validação básica
 	            if (credorCpf == null || credorCidade == null) {
 	                String msg = "Credor com informações inválidas ou nulas: CPF=" + credorCpf + ", Cidade=" + credorCidade;
-	                System.out.println(msg);
 	                LogCatcher.logInfo(msg);
 	                selectsParaInsert.add("SELECT <#NUMUNICO#>, '" + msg + "', SYSDATE, 'Aviso', " + codEmp + ", '" + alunoId + "' FROM DUAL");
 	                continue;
@@ -761,7 +729,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	            boolean alunoExiste = alunoId != null && mapaInfAlunos.containsKey(alunoId.trim() + "###" + codEmp);
 
 	            if (!credorExiste) {
-	                System.out.println("Cadastrando novo credor: " + credorCpfTrim);
 	                LogCatcher.logInfo("Novo credor detectado: " + credorCpfTrim);
 
 	                BigDecimal credorAtual = insertCredor(credorNome, credorCpf, credorEndereco, credorCep,
@@ -784,7 +751,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	                    }
 	                }
 	            } else {
-	                System.out.println("Credor já cadastrado: " + credorCpfTrim);
 	                LogCatcher.logInfo("Credor já existente: " + credorCpfTrim);
 
 	                BigDecimal credorCadastrado = mapaInfParceiros.get(credorCpfTrim);
@@ -822,10 +788,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	    return (obj.has(key) && !obj.get(key).isJsonNull()) ? obj.get(key).getAsString() : null;
 	}
 
-	
-	
-	
-	
 //Verifica se um credor já existe no banco de dados.
 	public boolean getIfCredorExist(String credorCpf) throws Exception {
 	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -1057,37 +1019,34 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	    BigDecimal countBai = BigDecimal.ZERO;
 	    BigDecimal codBai = BigDecimal.ZERO;
 
-	    System.out.println("[TRACE] Iniciando inserção de credor");
-	    System.out.println("[TRACE] Dados de entrada:");
-	    System.out.println("[TRACE] Nome: " + credorNome);
-	    System.out.println("[TRACE] CPF/CNPJ: " + credorCpf);
-	    System.out.println("[TRACE] Cidade: " + credorCidade);
-	    System.out.println("[TRACE] UF: " + credorUf);
+	    LogCatcher.logInfo("[TRACE] Iniciando inserção de credor");
+	    LogCatcher.logInfo("[TRACE] Dados de entrada:");
+	    LogCatcher.logInfo("[TRACE] Nome: " + credorNome);
+	    LogCatcher.logInfo("[TRACE] CPF/CNPJ: " + credorCpf);
+	    LogCatcher.logInfo("[TRACE] Cidade: " + credorCidade);
+	    LogCatcher.logInfo("[TRACE] UF: " + credorUf);
 	    LogCatcher.logInfo("\nIniciando inserção de credor: " + credorCpf + " - " + credorNome);
 
 	    if (credorNome == null || credorNome.trim().isEmpty()) {
 	        String msg = "[ERROR] Nome do credor não pode ser nulo ou vazio";
-	        System.err.println(msg);
 	        LogCatcher.logError(msg);
 	        return null;
 	    }
 
 	    if (credorCpf == null || credorCpf.trim().isEmpty()) {
 	        String msg = "[ERROR] CPF/CNPJ do credor não pode ser nulo ou vazio";
-	        System.err.println(msg);
 	        LogCatcher.logError(msg);
 	        return null;
 	    }
 
 	    if (credorCpf.length() == 11) {
 	        tipPessoa = "F";
-	        System.out.println("[TRACE] Tipo de Pessoa: Física (CPF)");
+	        LogCatcher.logInfo("[TRACE] Tipo de Pessoa: Física (CPF)");
 	    } else if (credorCpf.length() == 14) {
 	        tipPessoa = "J";
-	        System.out.println("[TRACE] Tipo de Pessoa: Jurídica (CNPJ)");
+	        LogCatcher.logInfo("[TRACE] Tipo de Pessoa: Jurídica (CNPJ)");
 	    } else {
 	        String msg = "[ERROR] CPF/CNPJ inválido: tamanho incorreto";
-	        System.err.println(msg);
 	        LogCatcher.logError(msg);
 	        return null;
 	    }
@@ -1096,10 +1055,10 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	        try {
 	            codBai = insertBairro(credorBairro, credorNome, alunoNome);
 	            countBai = countBai.add(BigDecimal.ONE);
-	            System.out.println("[TRACE] Bairro inserido com sucesso. Código: " + codBai);
+	            LogCatcher.logInfo("[TRACE] Bairro inserido com sucesso. Código: " + codBai);
 	        } catch (Exception e) {
 	            String msg = "[ERROR] Falha ao inserir bairro: " + e.getMessage();
-	            System.err.println(msg);
+	            LogCatcher.logInfo(msg);
 	            LogCatcher.logError(e);
 	        }
 	    }
@@ -1107,7 +1066,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	    try {
 	        jdbc.openSession();
 
-	        System.out.println("[TRACE] Verificando se credor já existe");
+	        LogCatcher.logInfo("[TRACE] Verificando se credor já existe");
 	        String checkCredorSQL = "SELECT CODPARC FROM TGFPAR WHERE CGC_CPF = ?";
 	        pstmtCredor = jdbc.getPreparedStatement(checkCredorSQL);
 	        pstmtCredor.setString(1, credorCpf);
@@ -1489,9 +1448,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 		
 		if ((cursoDescricao != null)
 				&& (validarCadastroCurso(cursoDescricao, credorNome, alunoNome))) {
-			// insertCurso(cursoDescricao, cursoId, credorNome, alunoNome);
 		} else {
-			//updateCurso(cursoDescricao, cursoId, credorNome, alunoNome);
 		}
 		
 		if ((cursoDescricao != null)
@@ -1680,79 +1637,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 		}
 	}
 	
-	//Insere um novo curso no banco de dados.
 
-	public void insertCurso(String cursoDescricao, String cursoId,
-			String credorNome, String alunoNome) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		String ativo = "S";
-		String analitico = "S";
-
-		int codCenCusPai = 10101000;
-		int grau = 4;
-
-		System.out.println("ID_EXTERNO: " + cursoId);
-		try {
-			jdbc.openSession();
-
-			String sqlUpdate = "INSERT INTO TSICUS(CODCENCUS, CODCENCUSPAI, DESCRCENCUS, ATIVO, ANALITICO, GRAU, AD_IDEXTERNO)VALUES ((SELECT MAX(CODCENCUS) + 1 FROM TSICUS WHERE CODCENCUSPAI = '10101000'), ? ,? , ?, ?, ?, ?)";
-
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-
-			pstmt.setInt(1, codCenCusPai);
-			pstmt.setString(2, cursoDescricao);
-			pstmt.setString(3, ativo);
-			pstmt.setString(4, analitico);
-			pstmt.setInt(5, grau);
-			pstmt.setString(6, cursoId);
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			insertLogIntegracao("Erro cadastrando curso: " + se.getMessage(),
-					"Erro", credorNome, alunoNome);
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			jdbc.closeSession();
-		}
-	}
-
-	
-	//Atualiza as informações de um curso no banco de dados.
-	public void updateCurso(String cursoDescricao, String cursoId,
-			String credorNome, String alunoNome) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-
-		System.out.println("ID_EXTERNO: " + cursoId);
-		try {
-			jdbc.openSession();
-
-			String sqlUpdate = "UPDATE TSICUS SET AD_IDEXTERNO = '"
-					+ cursoId
-					+ "' WHERE CODCENCUS = (SELECT CODCENCUS FROM TSICUS  WHERE TRANSLATE(UPPER (DESCRCENCUS), '������������������������������������', 'aeiouaeiouaeiouaocAEIOUAEIOUAEIOUAOC') LIKE TRANSLATE (UPPER ('%"
-					+ cursoDescricao.trim()
-					+ "'),  '������������������������������������', 'aeiouaeiouaeiouaocAEIOUAEIOUAEIOUAOC'))";
-
-			pstmt = jdbc.getPreparedStatement(sqlUpdate);
-
-			pstmt.executeUpdate();
-		} catch (Exception se) {
-			insertLogIntegracao("Erro cadastrando curso: " + se.getMessage(),
-					"Erro", credorNome, alunoNome);
-			se.printStackTrace();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			jdbc.closeSession();
-		}
-	}
 
 	
 	// Retorna o código máximo de projetos no banco de dados.
@@ -1976,50 +1861,6 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 
 
 	
-	//Valida se um endereço já está cadastrado no banco de dados.
-	public boolean validarCadastroEndereco(String endereco, String credorNome,
-			String alunoNome) throws Exception {
-		EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
-		JdbcWrapper jdbc = entityFacade.getJdbcWrapper();
-		PreparedStatement pstmt = null;
-		ResultSet rs = null;
-
-		BigDecimal count = BigDecimal.ZERO;
-		try {
-			jdbc.openSession();
-
-			String sqlNota = "SELECT COUNT(0) AS COUNT FROM TSIEND WHERE TRANSLATE(  \t    upper(NOMEEND),   \t    '������������������������������������',   \t    'aeiouaeiouaeiouaocAEIOUAEIOUAEIOUAOC'   \t  ) like TRANSLATE(    \t    upper((SELECT LTRIM(SUBSTR(?, INSTR(?, ' ') + 1))  FROM DUAL)),   \t    '������������������������������������',   \t    'aeiouaeiouaeiouaocAEIOUAEIOUAEIOUAOC')";
-
-			pstmt = jdbc.getPreparedStatement(sqlNota);
-			pstmt.setString(1, endereco);
-			pstmt.setString(2, endereco);
-
-			rs = pstmt.executeQuery();
-			if (rs.next()) {
-				count = rs.getBigDecimal("COUNT");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			insertLogIntegracao("Erro ao validar se endereco ja cadastrado: "
-					+ e.getMessage(), "Erro", credorNome, alunoNome);
-			LogCatcher.logError("Erro ao validar se endereco ja cadastrado: "
-					+ e.getMessage());
-			throw e;
-		} finally {
-			if (rs != null) {
-				rs.close();
-			}
-			if (pstmt != null) {
-				pstmt.close();
-			}
-			jdbc.closeSession();
-		}
-		if (count.compareTo(BigDecimal.ZERO) == 0) {
-			return true;
-		}
-		return false;
-	}
-
 	
 	//Valida se um bairro já está cadastrado no banco de dados.
 	public boolean validarCadastroBairro(String bairro, String credorNome,
@@ -2163,16 +2004,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 		}
 	}
 
-	/**
-	 * Overloaded method to include codemp in the log integration record
-	 * 
-	 * @param descricao   Description of the log entry
-	 * @param status      Status of the log entry
-	 * @param credorNome  Name of the creditor
-	 * @param alunoNome   Name of the student
-	 * @param codemp      Company code
-	 * @throws Exception  If there's an error during database operations
-	 */
+
 	public void insertLogIntegracao(String descricao, String status,
 	                               String credorNome, String alunoNome, BigDecimal codemp) throws Exception {
 	    EntityFacade entityFacade = EntityFacadeFactory.getDWFFacade();
@@ -2250,7 +2082,7 @@ public class AcaoGetCredorAlunoTurmaCursoCarga
 	private static final long ONE_MINUTE_IN_MS = 60 * 1000;
 	private static final Queue<Long> requestTimestamps = new LinkedList<>();
 
-	public synchronized String[] apiGet2(String ur, String token) throws Exception {
+	public synchronized String[] apiGet(String ur, String token) throws Exception {
 	    long currentTime = System.currentTimeMillis();
 	    requestTimestamps.removeIf(timestamp -> 
 	        currentTime - timestamp > ONE_MINUTE_IN_MS);

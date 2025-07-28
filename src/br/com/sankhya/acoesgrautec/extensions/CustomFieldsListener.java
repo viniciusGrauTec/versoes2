@@ -1,14 +1,19 @@
 package br.com.sankhya.acoesgrautec.extensions;
+import br.com.sankhya.jape.EntityFacade;
+import br.com.sankhya.jape.bmp.PersistentLocalEntity;
+import br.com.sankhya.jape.core.JapeSession;
 import br.com.sankhya.jape.vo.DynamicVO;
+import br.com.sankhya.jape.vo.EntityVO;
 import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper.BaixaHelperEvent;
 import br.com.sankhya.modelcore.financeiro.helper.BaixaHelper.BaixaHelperListener;
+import br.com.sankhya.modelcore.util.EntityFacadeFactory;
 
 
 public class CustomFieldsListener implements BaixaHelperListener {
 
     @Override
     public void beforeBaixa(BaixaHelperEvent event) throws Exception {
-        DynamicVO finVO = event.getFinVO(); // O registro financeiro sendo processado
+        DynamicVO finVO = event.getFinVO(); 
 
 
         finVO.setAceptTransientProperties(true);
@@ -40,7 +45,20 @@ public class CustomFieldsListener implements BaixaHelperListener {
     }
 
     @Override
-    public void afterBaixa(BaixaHelperEvent event) throws Exception {}
+    public void afterBaixa(BaixaHelperEvent event) throws Exception { 
+        DynamicVO finVOBaixado = event.getFinVO(); 
+        if (finVOBaixado == null) {
+            return;
+        }
+        String idExterno = (String) JapeSession.getProperty("IDEXTERNO_PARA_BAIXA");
+        if (idExterno != null && !idExterno.trim().isEmpty()) {       
+            EntityFacade dwfFacade = EntityFacadeFactory.getDWFFacade();          
+            PersistentLocalEntity finEntity = dwfFacade.findEntityByPrimaryKey("Financeiro", finVOBaixado.asBigDecimal("NUFIN"));
+            DynamicVO voToUpdate = (DynamicVO) finEntity.getValueObject();
+            voToUpdate.setProperty("AD_IDEXTERNO", idExterno);           
+            finEntity.setValueObject((EntityVO) voToUpdate);
+        }
+    }
     @Override
     public void beforeDespesaPendente(BaixaHelperEvent event) throws Exception {}
     @Override
